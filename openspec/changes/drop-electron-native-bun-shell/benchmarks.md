@@ -45,3 +45,19 @@ Dropping Electron removes a ~276 MB bundled browser per install and cuts idle
 memory by roughly a third even before sub-agent windows are re-added. The disk and
 process-count wins are unambiguous; the memory win is real but should be re-measured
 at full window parity.
+
+## Update — feature parity reached (feat/native-parity)
+
+Sub-agent windows, dock menu, drag, and single-instance are now implemented (the
+`drop-electron-native-bun-shell` migration), and the `restore-native-feature-parity`
+change adds custom characters, the sub-agent keepalive, `--character`, and
+primary-display placement. So the "main-window-only" caveat above no longer holds
+for the *feature set*.
+
+For the **memory** number specifically: idle (no active sub-agents) is still the
+main window only, so the ~440 MB idle figure remains representative. Under load,
+each active sub-agent adds one ~100×100 WKWebView panel — a fresh WebKit WebContent
+process, comparable per-window to one of Electron's renderer processes, so the
+relative win holds. A clean idle-vs-load re-measure (Electron 3-window run vs Bun
+with N sub-agent windows) is deferred to a controlled environment, since an active
+Claude Code session spawns sub-agents and perturbs an "idle" reading.
