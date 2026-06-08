@@ -68,13 +68,23 @@ working.
 
 ## 5. AppKitShell — WKWebView + bridge
 
-- [ ] 5.1 Add `WKWebView` as content view; disable `drawsBackground` for
-      transparency (Open Issue 2)
-- [ ] 5.2 `loadURL` → localhost asset server; inject the ~10-line `window.peonBridge`
-      shim over `window.webkit.messageHandlers` + an injected emit hook
+- [x] 5.1 `WKWebView` as content view; `drawsBackground=NO` + `underPageBackgroundColor`
+      clear for transparency (Open Issue 2) — `peon_make_webview_panel`.
+- [x] 5.2a `peon-asset://` `WKURLSchemeHandler` in the shim, serving bytes for paths
+      resolved by the **TS** resolver (`peon_register_asset` / `peon_set_project_root`).
+      Demo (`src/demo-orc.ts`) registers the 4 char assets and loads
+      `peon-asset://app/renderer/index.html`. No crash on load.
+- [ ] 5.2b Inject the ~10-line `window.peonBridge` shim over
+      `window.webkit.messageHandlers` + an injected emit hook (for IPC)
 - [ ] 5.3 `evaluateJS` (native→renderer) and `WKScriptMessageHandler`
       (renderer→native) wired to `onMessage`; validate inbound `ShellMessage`
-- [ ] 5.4 Verify the **unchanged** renderer animates the orc in the panel
+- [~] 5.4 Renderer loads in the panel without crashing; **on-device visual
+      confirmation that the orc animates is the USER gate below**
+
+### 5.GATE — on-device visual confirmation (USER runs this)
+- [ ] G4 `bun run build:native && bun run demo` → the **sleeping orc** appears
+      bottom-left in a transparent panel (your real renderer, system WebKit, no Electron)
+- [ ] G5 background/sprite/borders render correctly (scheme handler + three.js OK)
 
 ## 6. Wire the app onto the shell
 

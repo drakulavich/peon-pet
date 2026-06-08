@@ -10,7 +10,8 @@
     "test": "bun test",
     "test:watch": "bun test --watch",
     "build:native": "clang -framework Cocoa -framework WebKit -dynamiclib -fobjc-arc -o native/libpeonshell.dylib native/peonshell.m",
-    "spike": "bun run src/spike.ts"
+    "spike": "bun run src/spike.ts",
+    "demo": "bun run src/demo-orc.ts"
   },
   "dependencies": {
     "three": "^0.183.0"
