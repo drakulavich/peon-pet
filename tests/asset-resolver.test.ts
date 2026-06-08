@@ -90,6 +90,15 @@ describe("resolveAsset — character assets", () => {
     const c = ctx({ present: [] });
     expect(resolveAsset("peon-asset://sprite-atlas.png", c)).toBeNull();
   });
+
+  test("user-dir override applies to dock-icon.png too", () => {
+    const userDir = "/home/u/.peon/characters/orc";
+    const c = ctx({
+      userCharDir: userDir,
+      present: [join(userDir, "dock-icon.png"), join(ASSETS, "orc-dock-icon.png")],
+    });
+    expect(resolveAsset("peon-asset://dock-icon.png", c)?.filePath).toBe(join(userDir, "dock-icon.png"));
+  });
 });
 
 // ─── renderer files (path form) ───────────────────────────────────────────────

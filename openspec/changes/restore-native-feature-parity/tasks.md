@@ -4,23 +4,23 @@ Four independent gaps, highest user value first. Each leaves the app working.
 
 ## 1. Config directory
 
-- [ ] 1.1 **Create** `src/app/config.ts`, extracting the inline `loadConfig()` out of
-      `main.ts:48`. Add `configDir()` → existing Electron `Peon Pet` dir if present,
-      else native `peon-pet` (Open Question 1). `loadConfig()` reads
-      `<configDir>/peon-pet-config.json`.
-- [ ] 1.2 Unit-test `configDir()` resolution (injected existence check) + config
-      parse/fallback.
-- [ ] 1.3 Point `main.ts` at `configDir()` (replaces the inline path).
+- [x] 1.1 Created `src/app/config.ts` (extracted `loadConfig` out of `main.ts`) with
+      `configDir()` → legacy Electron `Peon Pet` dir if present, else native
+      `peon-pet`; injected FS seam. `loadConfig()` reads `<configDir>/peon-pet-config.json`.
+- [x] 1.2 `tests/config.test.ts`: dir resolution + parse + missing/malformed/non-object
+      fallback. 7 tests green.
+- [x] 1.3 `main.ts` uses `configDir()` / `loadConfig()`.
 
 ## 2. Custom characters + `--character`
 
-- [ ] 2.1 `main.ts`: parse `--character <name>` (and `--corner <c>`, OQ3); precedence
+- [x] 2.1 `main.ts`: `--character <name>` + `--corner <c>` parsed; precedence
       CLI > config > default.
-- [ ] 2.2 Build the asset context with
+- [x] 2.2 Asset context built with
       `userCharDir = join(configDir(), "characters", character)` so user files win.
-- [ ] 2.3 Verify all four assets (bg / sprite / borders / dock-icon) honor the user
-      dir; add a resolver test for a user-dir override of `dock-icon.png`.
-- [ ] 2.4 Manual: drop a custom `sprite-atlas.png` in
+- [x] 2.3 Resolver honors the user dir for all assets; added a `dock-icon.png`
+      user-override test. Verified live: `--character capybara` served
+      `capybara-sprite-atlas.png` / `capybara-borders.png`.
+- [ ] 2.4 Manual (on-device): drop a custom `sprite-atlas.png` in
       `<configDir>/characters/orc/` → the pet uses it.
 
 ## 3. Native sub-agent keepalive (relay dropped)
