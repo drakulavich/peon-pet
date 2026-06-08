@@ -39,22 +39,32 @@ working.
 - [x] 3.2 Unit-test resolution order, fallback, content types, and path-form /
       traversal-clamp behavior (no FFI). All green.
 
-## 4. AppKitShell — window (the risky FFI core)
+## 4. FFI spike — prove a real window (DECISION: C shim, not raw objc_msgSend)
 
-- [ ] 4.1 FFI bootstrap: `dlopen` libobjc/AppKit/WebKit; helpers for
-      `objc_getClass` / `sel_registerName` / `objc_msgSend` (pin the arm64 variants;
-      add a tiny C shim via `cc` if raw `msgSend` for `NSRect` gets ugly — Open
-      Issue 3)
-- [ ] 4.2 `NSApplication` init (activation policy `.regular`), run loop integration
-      with Bun's event loop
-- [ ] 4.3 Create the `NSPanel`: borderless + non-activating, clear/opaque-off, no
-      shadow, floating level + all-spaces collection behavior (resolve Open Issue 1
-      on device)
-- [ ] 4.4 `setPosition` / `show` / `hide` / `destroy`; retain/release discipline
-      (Open Issue 5)
-- [ ] 4.5 `getCursorPosition` + `getPrimaryWorkArea` with bottom-left→top-left
-      conversion inside the shell
-- [ ] 4.6 `setIgnoreMouseEvents` toggle; wire the existing cursor-poll hover logic
+> Resolved Open Issue 3: use a flat C shim (`native/peonshell.m` →
+> `libpeonshell.dylib`, built by `bun run build:native`) so `bun:ffi` only sees
+> scalar/pointer signatures. `src/spike.ts` exercises it.
+
+- [x] 4.1 C shim + FFI bootstrap: `dlopen(libpeonshell.dylib)` with scalar/pointer
+      signatures (no objc_msgSend marshaling). Verified by `bun run src/spike.ts --check`.
+- [x] 4.2 `NSApplication` init (activation policy `.regular`) via `peon_init`;
+      `peon_run` enters the AppKit run loop.
+- [x] 4.3 Create the `NSPanel`: borderless + non-activating, opaque-off + clear-ish
+      translucent fill, no shadow, screen-saver level + all-spaces collection
+      behavior (`peon_make_panel`). **Visual confirmation pending on-device.**
+- [x] 4.4 `peon_panel_show` / `peon_panel_set_origin` / `peon_panel_set_ignore_mouse`
+      (move / show / click-through toggle). ARC `CFBridgingRetain` keeps the panel
+      alive (Open Issue 5). `hide`/`destroy` to add in Phase 5.
+- [~] 4.5 `peon_primary_work_height` done (for bottom-left y conversion);
+      `getCursorPosition` + full `getPrimaryWorkArea` to add in Phase 5.
+- [x] 4.6 `setIgnoreMouseEvents` exposed (`peon_panel_set_ignore_mouse`); wiring the
+      cursor-poll hover loop (`WindowInteraction`) to it is Phase 6.
+
+### 4.GATE — on-device visual confirmation (USER runs this)
+- [ ] G1 `bun run build:native && bun run spike` → translucent square appears
+      bottom-left
+- [ ] G2 it floats over a normal window and a full-screen app; no focus theft
+- [ ] G3 clicking it passes through to the window beneath
 
 ## 5. AppKitShell — WKWebView + bridge
 

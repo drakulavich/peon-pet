@@ -248,11 +248,14 @@ These must be resolved during implementation; don't let them block the spec.
 2. **WKWebView transparency API stability.** `drawsBackground` via KVC works but is
    semi-private. Confirm it behaves on the target macOS version; fallback is a
    transparent `WKWebViewConfiguration` + clear `NSColor`.
-3. **`objc_msgSend` ergonomics over `bun:ffi`.** Variadic / struct-return
-   (`NSRect`) message sends need the right `msgSend` variants
-   (`objc_msgSend_stret` on some ABIs; on arm64 it's unified). Pin the approach
-   early; consider a thin C shim compiled with `cc` + `dlopen` if raw FFI gets
-   ugly.
+3. **`objc_msgSend` ergonomics over `bun:ffi`.** *Resolved (Phase 4 spike):*
+   chose the **thin C shim** (`native/peonshell.m`, a flat C API compiled to
+   `libpeonshell.dylib`) over raw `objc_msgSend`. The shim takes scalars
+   (e.g. 4 doubles) and builds `NSRect` natively, so `bun:ffi` never marshals
+   structs or selectors. The spike proves it: `peon_init` + `peon_make_panel`
+   bind and return a live `NSPanel`, and `peon_primary_work_height` reads the
+   real display. AppKitShell (Phase 5) grows the shim's C surface; `bun:ffi`
+   only ever sees scalar/pointer signatures.
 4. **Cursor poll vs. event tap.** 50 ms polling matches today and is simple, but a
    `CGEventTap` would be lower-latency/lower-power. Default to polling (Luca's
    simplicity); revisit only if it shows up in Dana's battery numbers.

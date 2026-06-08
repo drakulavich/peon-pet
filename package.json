@@ -8,7 +8,9 @@
     "start": "electron .",
     "dev": "electron . --dev",
     "test": "bun test",
-    "test:watch": "bun test --watch"
+    "test:watch": "bun test --watch",
+    "build:native": "clang -framework Cocoa -framework WebKit -dynamiclib -fobjc-arc -o native/libpeonshell.dylib native/peonshell.m",
+    "spike": "bun run src/spike.ts"
   },
   "dependencies": {
     "three": "^0.183.0"
