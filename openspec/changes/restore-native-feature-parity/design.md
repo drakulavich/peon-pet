@@ -41,7 +41,7 @@ Define `configDir()` returning the first of:
    exists** — so existing installs keep config + custom characters;
 2. else the native default (`~/Library/Application Support/peon-pet`).
 
-`loadConfig()` and the `characters/` lookup both use it. (See Open Question 2.)
+`loadConfig()` and the `characters/` lookup both use it. (See Open Question 1.)
 
 ### D4. Native sub-agent keepalive (relay dropped)
 
@@ -67,11 +67,20 @@ just *not* adding them).
 
 ### D5. Primary display
 
-Add `peon_primary_*` accessors (a `[NSScreen screens][0]`-style primary lookup, or
-the screen whose frame origin is `(0,0)` — the menu-bar display) alongside the
-existing `mainScreen` ones, and switch `AppKitShell.getPrimaryWorkArea()` +
-`getCursorPosition()` to use the **primary** display consistently so window
-placement and cursor hit-testing share one coordinate space.
+Today the shim's `peon_work_*` / `peon_cursor_*` use `[NSScreen mainScreen]` (the
+*active* screen), and `AppKitShell` consumes those. Add true **primary**-display
+accessors — the screen whose frame origin is `(0,0)` / the menu-bar display
+(`[NSScreen screens][0]`) — and switch `getPrimaryWorkArea()` + `getCursorPosition()`
+to them consistently, so placement and hit-testing share one coordinate space.
+
+Two reconciliations the executor must not miss:
+
+- A misleadingly-named `peon_primary_work_height()` already exists in the shim but
+  reads `mainScreen` and is used **only** by the dev tools (`src/spike.ts`,
+  `src/demo-orc.ts`), not by `AppKitShell`. Rename/replace it as part of this work
+  so there's one clear primary-vs-main distinction, and update those two callers.
+- The new accessors must also be **bound in `AppKitShell.loadLib`** and the
+  conversion helpers updated — the FFI surface change is not just native.
 
 ## Open questions
 
@@ -93,6 +102,12 @@ placement and cursor hit-testing share one coordinate space.
   ends, or a finished session never decays. The watcher already clears
   `activeSubagentToolIds` on `turn_duration` and tears down stale background files,
   so this falls out — but the test must cover the stop transition.
+- **Keepalive refreshes, it doesn't revive.** The heartbeat early-returns on an
+  empty tracker and only *updates timestamps of already-tracked* sessions
+  (`main.ts:208`); `getActiveSessionIds()` never *inserts*. So if a parent fully
+  prunes (`PRUNE_MS` = 10 min) mid-sub-agent it won't come back. In practice a
+  sub-agent keeps the parent < 10 min stale, so this is accepted, not fixed — but
+  call it out so no one assumes revival.
 - **Config-dir migration** could read a stale Electron config; acceptable — it's the
   user's own prior setting.
 - **Primary-display FFI** is the only new native surface; cover it in the manual

@@ -4,8 +4,9 @@ Four independent gaps, highest user value first. Each leaves the app working.
 
 ## 1. Config directory
 
-- [ ] 1.1 `src/app/config.ts`: `configDir()` → existing Electron `Peon Pet` dir if
-      present, else native `peon-pet` (Open Question 2). `loadConfig()` reads
+- [ ] 1.1 **Create** `src/app/config.ts`, extracting the inline `loadConfig()` out of
+      `main.ts:48`. Add `configDir()` → existing Electron `Peon Pet` dir if present,
+      else native `peon-pet` (Open Question 1). `loadConfig()` reads
       `<configDir>/peon-pet-config.json`.
 - [ ] 1.2 Unit-test `configDir()` resolution (injected existence check) + config
       parse/fallback.
@@ -38,10 +39,12 @@ Four independent gaps, highest user value first. Each leaves the app working.
 
 ## 4. Primary-display correctness
 
-- [ ] 4.1 `native/peonshell.m`: `peon_primary_work_left/top/width/height` +
-      `peon_primary_cursor_*` (or document that `mainScreen` == primary and skip).
-- [ ] 4.2 `AppKitShell`: use the primary-display accessors for `getPrimaryWorkArea`
-      + `getCursorPosition`, one coordinate space.
+- [ ] 4.1 `native/peonshell.m`: add primary-display accessors (`[NSScreen screens][0]`
+      / origin-`(0,0)` screen) for work-area bounds + cursor. Reconcile the existing
+      misnamed `peon_primary_work_height` stub (reads `mainScreen`, used only by
+      `src/spike.ts` + `src/demo-orc.ts`) — rename/replace it and update those callers.
+- [ ] 4.2 `AppKitShell`: bind the new accessors in `loadLib` and use them in
+      `getPrimaryWorkArea` + `getCursorPosition` (one coordinate space).
 - [ ] 4.3 Manual: on a 2-monitor setup the pet sits bottom-left of the **primary**
       display and hover works there.
 
@@ -51,5 +54,9 @@ Four independent gaps, highest user value first. Each leaves the app working.
 - [ ] 5.2 `tsc --noEmit` clean.
 - [ ] 5.3 Manual smoke: custom skin loads; orc stays awake through a long sub-agent
       task; `--character capybara` switches the skin; correct screen on multi-monitor.
-- [ ] 5.4 Re-measure idle memory at full parity; update the migration's
-      `benchmarks.md`.
+- [ ] 5.4 Re-measure idle memory at full parity; update
+      `openspec/changes/drop-electron-native-bun-shell/benchmarks.md`.
+
+> Test layout: new tests go under the top-level `tests/` directory (e.g.
+> `tests/config.test.ts`, `tests/jsonl-watcher.test.ts`), matching the existing
+> suite — not co-located `src/app/*.test.ts`.

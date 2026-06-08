@@ -56,8 +56,9 @@ This change closes those gaps so the native build is a complete replacement.
   `native/peonshell.m` + `src/shell/appkit.ts` (primary-display accessors).
 - **User-visible:** custom skins load; the orc stays awake through long sub-agent
   tasks; `--character` works; correct screen on multi-monitor.
-- **Risk:** low. The keepalive and asset context are pure and unit-testable; only
-  the primary-display FFI accessor is new native code.
+- **Risk:** low. The keepalive and asset context are pure and unit-testable; the
+  only native change is the primary-display work (a small accessor + reconciling an
+  existing misnamed `peon_primary_work_height` stub + its `AppKitShell` binding).
 
 ## Non-goals
 
