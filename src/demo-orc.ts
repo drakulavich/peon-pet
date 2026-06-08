@@ -33,7 +33,7 @@ const { symbols: shim } = dlopen(DYLIB, {
   },
   peon_panel_load: { args: [FFIType.ptr, FFIType.cstring], returns: FFIType.void },
   peon_panel_show: { args: [FFIType.ptr], returns: FFIType.void },
-  peon_primary_work_height: { args: [], returns: FFIType.f64 },
+  peon_work_height: { args: [], returns: FFIType.f64 },
   peon_run: { args: [], returns: FFIType.void },
 });
 
@@ -76,7 +76,7 @@ if (!panel) {
   process.exit(1);
 }
 console.log(`✓ WKWebView panel created (${SIZE}×${SIZE}) at bottom-left`);
-console.log(`✓ work height: ${shim.peon_primary_work_height()}px`);
+console.log(`✓ work height (primary): ${shim.peon_work_height()}px`);
 
 if (process.argv.includes("--check")) {
   console.log("✓ FFI + WKWebView plumbing OK (--check: skipping load + run loop)");

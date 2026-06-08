@@ -37,14 +37,16 @@ Four independent gaps, highest user value first. Each leaves the app working.
 
 ## 4. Primary-display correctness
 
-- [ ] 4.1 `native/peonshell.m`: add primary-display accessors (`[NSScreen screens][0]`
-      / origin-`(0,0)` screen) for work-area bounds + cursor. Reconcile the existing
-      misnamed `peon_primary_work_height` stub (reads `mainScreen`, used only by
-      `src/spike.ts` + `src/demo-orc.ts`) — rename/replace it and update those callers.
-- [ ] 4.2 `AppKitShell`: bind the new accessors in `loadLib` and use them in
-      `getPrimaryWorkArea` + `getCursorPosition` (one coordinate space).
-- [ ] 4.3 Manual: on a 2-monitor setup the pet sits bottom-left of the **primary**
-      display and hover works there.
+- [x] 4.1 `native/peonshell.m`: `peon_work_*` now read the **primary** display
+      (`peon_primary_screen()` = `[NSScreen screens][0]`) instead of `mainScreen`.
+      Removed the misnamed `peon_primary_work_height` stub; `src/spike.ts` +
+      `src/demo-orc.ts` updated to `peon_work_height`.
+- [x] 4.2 `AppKitShell` already binds `peon_work_*` / `peon_cursor_*` in `loadLib`
+      and uses them in `getPrimaryWorkArea` + `getCursorPosition` — now
+      primary-based, one coordinate space. No change needed.
+- [ ] 4.3 Manual (on-device): on a 2-monitor setup the pet sits bottom-left of the
+      **primary** display and hover works there. (Single-display verified: placement
+      unchanged at `(20,20)`.)
 
 ## 5. Verification
 

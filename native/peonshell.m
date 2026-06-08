@@ -328,19 +328,21 @@ void peon_panel_set_origin(void *panel, double x, double y) {
   [(__bridge NSPanel *)panel setFrameOrigin:NSMakePoint(x, y)];
 }
 
-double peon_primary_work_height(void) {
-  NSScreen *screen = [NSScreen mainScreen];
-  return screen ? screen.visibleFrame.size.height : 0.0;
+// The PRIMARY display (menu-bar screen, `[NSScreen screens][0]`) — deterministic
+// for a corner-anchored pet, unlike `mainScreen` (the active/key screen).
+static NSScreen *peon_primary_screen(void) {
+  NSArray<NSScreen *> *screens = [NSScreen screens];
+  return screens.count > 0 ? screens[0] : [NSScreen mainScreen];
 }
 
-// Work area (visibleFrame, excludes menu bar + dock), AppKit bottom-left coords.
-// AppKitShell converts between these and its top-left convention.
-double peon_work_left(void) { return [NSScreen mainScreen].visibleFrame.origin.x; }
-double peon_work_width(void) { return [NSScreen mainScreen].visibleFrame.size.width; }
-double peon_work_height(void) { return [NSScreen mainScreen].visibleFrame.size.height; }
+// Work area (visibleFrame, excludes menu bar + dock), AppKit bottom-left coords on
+// the primary display. AppKitShell converts between these and its top-left convention.
+double peon_work_left(void) { return peon_primary_screen().visibleFrame.origin.x; }
+double peon_work_width(void) { return peon_primary_screen().visibleFrame.size.width; }
+double peon_work_height(void) { return peon_primary_screen().visibleFrame.size.height; }
 // Top edge of the work area in AppKit coords (origin.y + height).
 double peon_work_top(void) {
-  NSRect vf = [NSScreen mainScreen].visibleFrame;
+  NSRect vf = peon_primary_screen().visibleFrame;
   return vf.origin.y + vf.size.height;
 }
 
