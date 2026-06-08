@@ -51,6 +51,13 @@ are injected) so it is fully unit-testable without FFI.
 - **AND** a request whose normalized path would escape the project root cannot
   reach a file outside it
 
+#### Scenario: Cross-origin textures are permitted
+
+- **WHEN** the renderer loads a character texture via a host-form URL
+  (`peon-asset://sprite-atlas.png`), which is a different origin from the document
+- **THEN** the scheme handler responds with `Access-Control-Allow-Origin: *`
+- **AND** the texture loads into WebGL (not tainted), so the orc renders visibly
+
 #### Scenario: CSP remains valid
 
 - **WHEN** the document loads over `peon-asset://`

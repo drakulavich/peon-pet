@@ -56,19 +56,38 @@ static NSString *peon_resolve_url(NSURL *url) {
 @interface PeonSchemeHandler : NSObject <WKURLSchemeHandler>
 @end
 
+static bool gVerbose = false;
+
 @implementation PeonSchemeHandler
 - (void)webView:(WKWebView *)webView startURLSchemeTask:(id<WKURLSchemeTask>)task {
   NSURL *url = task.request.URL;
   NSString *filePath = peon_resolve_url(url);
   NSData *data = filePath ? [NSData dataWithContentsOfFile:filePath] : nil;
+  if (gVerbose) {
+    fprintf(stderr, "[scheme] %s -> %s (%s)\n", url.absoluteString.UTF8String,
+            filePath ? filePath.UTF8String : "(unresolved)",
+            data ? [NSString stringWithFormat:@"%lu bytes", (unsigned long)data.length].UTF8String
+                 : "NOT FOUND");
+  }
   if (!data) {
     [task didFailWithError:[NSError errorWithDomain:@"peon-asset" code:404 userInfo:nil]];
     return;
   }
-  NSURLResponse *resp = [[NSURLResponse alloc] initWithURL:url
-                                                  MIMEType:peon_mime_for_path(filePath)
-                                     expectedContentLength:data.length
-                                          textEncodingName:nil];
+  // NSHTTPURLResponse so we can send CORS + Content-Type. Character assets are
+  // host-form (peon-asset://<file>) = a different origin from the document
+  // (peon-asset://app); three.js TextureLoader fetches them with crossOrigin
+  // 'anonymous', so without Access-Control-Allow-Origin the textures are tainted
+  // and never reach WebGL (the orc draws but is invisible).
+  NSDictionary *headers = @{
+    @"Content-Type" : peon_mime_for_path(filePath),
+    @"Content-Length" : [NSString stringWithFormat:@"%lu", (unsigned long)data.length],
+    @"Access-Control-Allow-Origin" : @"*",
+    @"Cache-Control" : @"no-store",
+  };
+  NSHTTPURLResponse *resp = [[NSHTTPURLResponse alloc] initWithURL:url
+                                                       statusCode:200
+                                                      HTTPVersion:@"HTTP/1.1"
+                                                     headerFields:headers];
   [task didReceiveResponse:resp];
   [task didReceiveData:data];
   [task didFinish];
@@ -78,8 +97,61 @@ static NSString *peon_resolve_url(NSURL *url) {
 
 static PeonSchemeHandler *gSchemeHandler = nil; // keep alive
 
+// ── Diagnostics delegate: navigation + page console/errors → stderr ───────────
+@interface PeonDelegate : NSObject <WKNavigationDelegate, WKScriptMessageHandler>
+@end
+
+@implementation PeonDelegate
+- (void)webView:(WKWebView *)webView didFinishNavigation:(WKNavigation *)nav {
+  if (gVerbose) fprintf(stderr, "[nav] didFinish\n");
+}
+- (void)webView:(WKWebView *)webView didFailNavigation:(WKNavigation *)nav withError:(NSError *)e {
+  fprintf(stderr, "[nav] didFail: %s\n", e.localizedDescription.UTF8String);
+}
+- (void)webView:(WKWebView *)webView
+    didFailProvisionalNavigation:(WKNavigation *)nav
+                       withError:(NSError *)e {
+  fprintf(stderr, "[nav] didFailProvisional: %s\n", e.localizedDescription.UTF8String);
+}
+- (void)userContentController:(WKUserContentController *)ucc
+      didReceiveScriptMessage:(WKScriptMessage *)message {
+  fprintf(stderr, "[%s] %s\n", message.name.UTF8String,
+          [NSString stringWithFormat:@"%@", message.body].UTF8String);
+}
+@end
+
+static PeonDelegate *gDelegate = nil; // keep alive
+
+// JS injected at document start: forward page errors + console.error to native
+// (surfaces renderer problems that are otherwise invisible from the Bun side).
+static NSString *const kPeonLogJS =
+    @"(function(){function s(k,m){try{window.webkit.messageHandlers.peonlog.postMessage(k+': '+m);}catch(e){}}"
+    @"window.addEventListener('error',function(e){s('error',(e.message||'')+' @ '+(e.filename||'')+':'+(e.lineno||''));});"
+    @"window.addEventListener('unhandledrejection',function(e){s('reject',String(e.reason));});"
+    @"var oe=console.error;console.error=function(){s('console.error',Array.prototype.join.call(arguments,' '));oe.apply(console,arguments);};})();";
+
+void peon_set_verbose(bool v) { gVerbose = v; }
+
+// JS injected at document start: define window.peonBridge (the surface the
+// renderer expects from Electron's preload) over WKScriptMessageHandler. Native
+// pushes events via evaluateJavaScript("window.__peonEmit(channel, data)").
+static NSString *const kPeonBridgeJS =
+    @"(function(){var H={};window.__peonHandlers=H;"
+    @"function post(m){try{window.webkit.messageHandlers.peon.postMessage(m);}catch(e){}}"
+    @"window.peonBridge={"
+    @"onEvent:function(cb){H.event=cb;},"
+    @"onSessionUpdate:function(cb){H.session=cb;},"
+    @"onConfig:function(cb){H.config=cb;},"
+    @"startDrag:function(){post({type:'drag-start'});},"
+    @"stopDrag:function(){post({type:'drag-stop'});}};"
+    @"window.__peonEmit=function(channel,data){"
+    @"if(channel==='peon-event'&&H.event)H.event(data);"
+    @"else if(channel==='session-update'&&H.session)H.session(data);"
+    @"else if(channel==='peon-config'&&H.config)H.config(data);};})();";
+
 // ── App lifecycle ─────────────────────────────────────────────────────────────
 void peon_init(void) {
+  setvbuf(stderr, NULL, _IONBF, 0); // unbuffered so diagnostics survive
   [NSApplication sharedApplication];
   [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
   if (!gAssetMap) gAssetMap = [NSMutableDictionary dictionary];
@@ -138,14 +210,41 @@ void *peon_make_webview_panel(double x, double y, double w, double h) {
   NSPanel *panel = peon_new_panel(x, y, w, h);
 
   if (!gSchemeHandler) gSchemeHandler = [[PeonSchemeHandler alloc] init];
+  if (!gDelegate) gDelegate = [[PeonDelegate alloc] init];
+
   WKWebViewConfiguration *cfg = [[WKWebViewConfiguration alloc] init];
   [cfg setURLSchemeHandler:gSchemeHandler forURLScheme:@"peon-asset"];
 
+  // Inject error/console forwarding and register the log message handler.
+  WKUserScript *logScript =
+      [[WKUserScript alloc] initWithSource:kPeonLogJS
+                             injectionTime:WKUserScriptInjectionTimeAtDocumentStart
+                          forMainFrameOnly:YES];
+  [cfg.userContentController addUserScript:logScript];
+  // peonBridge shim must exist before the document's module scripts run.
+  WKUserScript *bridgeScript =
+      [[WKUserScript alloc] initWithSource:kPeonBridgeJS
+                             injectionTime:WKUserScriptInjectionTimeAtDocumentStart
+                          forMainFrameOnly:YES];
+  [cfg.userContentController addUserScript:bridgeScript];
+  [cfg.userContentController addScriptMessageHandler:gDelegate name:@"peonlog"];
+  [cfg.userContentController addScriptMessageHandler:gDelegate name:@"peon"];
+
   WKWebView *web = [[WKWebView alloc] initWithFrame:NSMakeRect(0, 0, w, h)
                                       configuration:cfg];
+  web.navigationDelegate = gDelegate;
   // Transparent web view over the clear panel.
-  @try { [web setValue:@(NO) forKey:@"drawsBackground"]; } @catch (__unused id e) {}
+  @try {
+    [web setValue:@(NO) forKey:@"drawsBackground"];
+    if (gVerbose) fprintf(stderr, "[web] drawsBackground=NO OK\n");
+  } @catch (NSException *e) {
+    fprintf(stderr, "[web] drawsBackground KVC FAILED: %s\n", e.reason.UTF8String);
+  }
   if (@available(macOS 12.0, *)) web.underPageBackgroundColor = [NSColor clearColor];
+  // Reinforce transparency at the layer level (some macOS versions need this).
+  web.wantsLayer = YES;
+  web.layer.opaque = NO;
+  web.layer.backgroundColor = [NSColor clearColor].CGColor;
 
   panel.contentView = web;
   return (void *)CFBridgingRetain(panel);
@@ -154,7 +253,10 @@ void *peon_make_webview_panel(double x, double y, double w, double h) {
 void peon_panel_load(void *panel, const char *url) {
   NSPanel *p = (__bridge NSPanel *)panel;
   WKWebView *web = (WKWebView *)p.contentView;
-  NSURL *nsurl = [NSURL URLWithString:[NSString stringWithUTF8String:url]];
+  NSString *s = [NSString stringWithUTF8String:url];
+  NSURL *nsurl = [NSURL URLWithString:s];
+  if (gVerbose) fprintf(stderr, "[load] %s (url %s)\n", s.UTF8String, nsurl ? "ok" : "NIL");
+  if (!nsurl) return;
   [web loadRequest:[NSURLRequest requestWithURL:nsurl]];
 }
 

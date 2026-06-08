@@ -24,6 +24,7 @@ if (!existsSync(DYLIB)) {
 
 const { symbols: shim } = dlopen(DYLIB, {
   peon_init: { args: [], returns: FFIType.void },
+  peon_set_verbose: { args: [FFIType.bool], returns: FFIType.void },
   peon_set_project_root: { args: [FFIType.cstring], returns: FFIType.void },
   peon_register_asset: { args: [FFIType.cstring, FFIType.cstring], returns: FFIType.void },
   peon_make_webview_panel: {
@@ -47,6 +48,7 @@ const CHARACTER = DEFAULT_CHARACTER;
 const ASSET_NAMES = ["bg.png", "sprite-atlas.png", "borders.png", "dock-icon.png"];
 
 shim.peon_init();
+shim.peon_set_verbose(process.argv.includes("--quiet") ? false : true);
 shim.peon_set_project_root(cstr(PROJECT_ROOT));
 
 // Resolve each character asset in TS (the tested precedence) and hand the

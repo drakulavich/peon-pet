@@ -74,17 +74,23 @@ working.
       resolved by the **TS** resolver (`peon_register_asset` / `peon_set_project_root`).
       Demo (`src/demo-orc.ts`) registers the 4 char assets and loads
       `peon-asset://app/renderer/index.html`. No crash on load.
-- [ ] 5.2b Inject the ~10-line `window.peonBridge` shim over
-      `window.webkit.messageHandlers` + an injected emit hook (for IPC)
-- [ ] 5.3 `evaluateJS` (native→renderer) and `WKScriptMessageHandler`
-      (renderer→native) wired to `onMessage`; validate inbound `ShellMessage`
-- [~] 5.4 Renderer loads in the panel without crashing; **on-device visual
-      confirmation that the orc animates is the USER gate below**
+- [x] 5.2b Inject the `window.peonBridge` shim (`onEvent`/`onSessionUpdate`/`onConfig`/
+      `startDrag`/`stopDrag`) + `window.__peonEmit` over `WKScriptMessageHandler`
+      at document-start, so the unchanged renderer boots without a preload.
+- [x] 5.2c **CORS fix:** scheme handler returns `NSHTTPURLResponse` with
+      `Access-Control-Allow-Origin: *`. Character assets are host-form
+      (`peon-asset://<file>`) = cross-origin vs the document; three.js TextureLoader
+      uses `crossOrigin=anonymous`, so without this the textures were tainted and
+      the orc drew invisibly (confirmed: 1428 GL draws, no pixels).
+- [~] 5.3 `WKScriptMessageHandler` (renderer→native, "peon" channel) wired and
+      `window.__peonEmit` ready for native→renderer; `evaluateJS` push +
+      `onMessage` routing into `WindowInteraction` is Phase 6.
+- [x] 5.4 Renderer animates in the panel. **Visually confirmed on-device (G4+G5).**
 
-### 5.GATE — on-device visual confirmation (USER runs this)
-- [ ] G4 `bun run build:native && bun run demo` → the **sleeping orc** appears
-      bottom-left in a transparent panel (your real renderer, system WebKit, no Electron)
-- [ ] G5 background/sprite/borders render correctly (scheme handler + three.js OK)
+### 5.GATE — on-device visual confirmation ✅ DONE
+- [x] G4 `bun run demo` → the **sleeping orc** renders bottom-left in a transparent
+      panel (real renderer, system WebKit, no Electron) — confirmed via screenshot.
+- [x] G5 background + sprite + borders all render (scheme handler + three.js + CORS).
 
 ## 6. Wire the app onto the shell
 

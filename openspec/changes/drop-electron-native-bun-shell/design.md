@@ -245,9 +245,19 @@ These must be resolved during implementation; don't let them block the spec.
 1. **Window level vs. macOS menubar/notifications.** Screen-saver level may float
    over the menubar or Notification Center. Decide the exact level that clears
    normal app windows and full-screen apps but not system UI. *(Probe on device.)*
-2. **WKWebView transparency API stability.** `drawsBackground` via KVC works but is
-   semi-private. Confirm it behaves on the target macOS version; fallback is a
-   transparent `WKWebViewConfiguration` + clear `NSColor`.
+2. **WKWebView transparency.** *Resolved (Phase 5a, on-device):* `setValue:@NO
+   forKey:@"drawsBackground"` succeeds (no exception) + `underPageBackgroundColor =
+   clear` + `layer.opaque = NO` gives a transparent web view. The black square we
+   first saw was NOT a webview-transparency bug — it was the renderer's *opaque*
+   background mesh rendering black because its texture failed the cross-origin
+   load. Fixed by the CORS header (Open Issue 8), not by transparency changes.
+8. **Cross-origin textures over `peon-asset://`.** *Resolved (Phase 5a):* character
+   assets are host-form (`peon-asset://sprite-atlas.png`) = a different origin from
+   the document (`peon-asset://app`). three.js `TextureLoader` fetches with
+   `crossOrigin=anonymous`, so the scheme handler MUST return
+   `Access-Control-Allow-Origin: *` (via `NSHTTPURLResponse`) or textures are
+   tainted and the orc renders invisibly. This is now required behavior, captured
+   in the rendering spec.
 3. **`objc_msgSend` ergonomics over `bun:ffi`.** *Resolved (Phase 4 spike):*
    chose the **thin C shim** (`native/peonshell.m`, a flat C API compiled to
    `libpeonshell.dylib`) over raw `objc_msgSend`. The shim takes scalars
