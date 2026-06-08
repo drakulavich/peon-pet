@@ -1,0 +1,135 @@
+import { describe, test, expect } from "bun:test";
+import { join } from "node:path";
+import { resolveAsset, contentTypeFor, type AssetContext } from "../src/app/asset-resolver.ts";
+import { bundledFilename, BUNDLED_CHARS } from "../src/app/characters.ts";
+
+const ROOT = "/proj";
+const ASSETS = "/proj/renderer/assets";
+
+function ctx(over: Partial<AssetContext> & { present?: string[] } = {}): AssetContext {
+  const present = new Set(over.present ?? []);
+  return {
+    character: over.character ?? "orc",
+    projectRoot: over.projectRoot ?? ROOT,
+    assetsDir: over.assetsDir ?? ASSETS,
+    userCharDir: over.userCharDir ?? null,
+    fileExists: over.fileExists ?? ((p: string) => present.has(p)),
+  };
+}
+
+// ─── characters map ───────────────────────────────────────────────────────────
+
+describe("bundledFilename", () => {
+  test("maps orc sprite atlas", () => {
+    expect(bundledFilename("orc", "sprite-atlas.png")).toBe("orc-sprite-atlas.png");
+  });
+
+  test("capybara bg.png falls back to orc's bg-pixel.png", () => {
+    // capybara has no bg.png entry → orc fallback
+    expect(BUNDLED_CHARS.capybara["bg.png"]).toBeUndefined();
+    expect(bundledFilename("capybara", "bg.png")).toBe("bg-pixel.png");
+  });
+
+  test("unknown character falls back to orc map", () => {
+    expect(bundledFilename("dragon", "sprite-atlas.png")).toBe("orc-sprite-atlas.png");
+  });
+
+  test("unknown asset name passes through unchanged", () => {
+    expect(bundledFilename("orc", "mystery.png")).toBe("mystery.png");
+  });
+});
+
+// ─── content types ────────────────────────────────────────────────────────────
+
+describe("contentTypeFor", () => {
+  test.each([
+    ["a.html", "text/html; charset=utf-8"],
+    ["a.js", "text/javascript; charset=utf-8"],
+    ["a.png", "image/png"],
+    ["flash.vert", "text/plain; charset=utf-8"],
+    ["flash.frag", "text/plain; charset=utf-8"],
+    ["weird.xyz", "application/octet-stream"],
+  ])("%s → %s", (file, type) => {
+    expect(contentTypeFor(file)).toBe(type);
+  });
+});
+
+// ─── character assets (host form) ─────────────────────────────────────────────
+
+describe("resolveAsset — character assets", () => {
+  test("orc sprite-atlas resolves to bundled file", () => {
+    const c = ctx({ present: [join(ASSETS, "orc-sprite-atlas.png")] });
+    const r = resolveAsset("peon-asset://sprite-atlas.png", c);
+    expect(r).toEqual({ filePath: join(ASSETS, "orc-sprite-atlas.png"), contentType: "image/png" });
+  });
+
+  test("user-installed character dir takes precedence over bundled", () => {
+    const userDir = "/home/u/.peon/characters/orc";
+    const c = ctx({
+      userCharDir: userDir,
+      present: [join(userDir, "sprite-atlas.png"), join(ASSETS, "orc-sprite-atlas.png")],
+    });
+    const r = resolveAsset("peon-asset://sprite-atlas.png", c);
+    expect(r?.filePath).toBe(join(userDir, "sprite-atlas.png"));
+  });
+
+  test("falls back to bundled when user dir lacks the file", () => {
+    const userDir = "/home/u/.peon/characters/orc";
+    const c = ctx({ userCharDir: userDir, present: [join(ASSETS, "orc-sprite-atlas.png")] });
+    const r = resolveAsset("peon-asset://sprite-atlas.png", c);
+    expect(r?.filePath).toBe(join(ASSETS, "orc-sprite-atlas.png"));
+  });
+
+  test("capybara bg.png resolves via orc fallback file", () => {
+    const c = ctx({ character: "capybara", present: [join(ASSETS, "bg-pixel.png")] });
+    const r = resolveAsset("peon-asset://bg.png", c);
+    expect(r?.filePath).toBe(join(ASSETS, "bg-pixel.png"));
+  });
+
+  test("returns null when the bundled file is missing", () => {
+    const c = ctx({ present: [] });
+    expect(resolveAsset("peon-asset://sprite-atlas.png", c)).toBeNull();
+  });
+});
+
+// ─── renderer files (path form) ───────────────────────────────────────────────
+
+describe("resolveAsset — renderer files", () => {
+  test("document path resolves under project root", () => {
+    const c = ctx({ present: [join(ROOT, "renderer/index.html")] });
+    const r = resolveAsset("peon-asset://app/renderer/index.html", c);
+    expect(r).toEqual({
+      filePath: join(ROOT, "renderer/index.html"),
+      contentType: "text/html; charset=utf-8",
+    });
+  });
+
+  test("three.js module under node_modules resolves", () => {
+    const p = join(ROOT, "node_modules/three/build/three.module.js");
+    const c = ctx({ present: [p] });
+    const r = resolveAsset("peon-asset://app/node_modules/three/build/three.module.js", c);
+    expect(r?.filePath).toBe(p);
+    expect(r?.contentType).toBe("text/javascript; charset=utf-8");
+  });
+
+  test("shader file resolves with text/plain", () => {
+    const p = join(ROOT, "renderer/shaders/flash.vert");
+    const c = ctx({ present: [p] });
+    const r = resolveAsset("peon-asset://app/renderer/shaders/flash.vert", c);
+    expect(r?.contentType).toBe("text/plain; charset=utf-8");
+  });
+
+  test("missing path-form file returns null", () => {
+    const c = ctx({ present: [] });
+    expect(resolveAsset("peon-asset://app/renderer/missing.js", c)).toBeNull();
+  });
+
+  test("path traversal is clamped within the project root (cannot reach the real FS root)", () => {
+    // URL normalization clamps `..` at the authority root, so a path-form request
+    // can never escape projectRoot — it resolves under /proj, never to real /etc.
+    const c = ctx({ fileExists: () => true });
+    const r = resolveAsset("peon-asset://app/../../etc/passwd", c);
+    expect(r?.filePath.startsWith(join(ROOT, ""))).toBe(true);
+    expect(r?.filePath).not.toBe("/etc/passwd");
+  });
+});

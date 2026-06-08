@@ -1,6 +1,13 @@
 node_modules/
 dist/
 *.log
+
+# OMC session state
+.omc/
+
+# Compiled native shim (built via `bun run build:native`)
+native/*.dylib
+
 # Raw generation artifacts (intermediate files from sprite/image generation)
 2026-*-*-*.png
 
