@@ -101,7 +101,10 @@ export class JsonlWatcher extends EventEmitter {
     const active = new Set<string>();
     for (const state of this._fileStates.values()) {
       if (state.isSubagentFile) {
-        active.add(state.sessionId); // live background sub-agent → parent stays active
+        // Live background sub-agent → parent stays active. This decays ONLY because
+        // `_watchSubagentFile` always arms a stale timer that deletes the file state
+        // after SUBAGENT_IDLE_MS; don't drop that invariant or sessions stick active.
+        active.add(state.sessionId);
       } else if ((state.pendingTools?.size ?? 0) > 0 || (state.activeSubagentToolIds?.size ?? 0) > 0) {
         active.add(state.sessionId);
       }

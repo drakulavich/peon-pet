@@ -9,8 +9,9 @@ import { existsSync } from "node:fs";
 import { AppKitShell } from "./shell/appkit.ts";
 import { resolveAsset } from "./app/asset-resolver.ts";
 import { DEFAULT_CHARACTER } from "./app/characters.ts";
-import { cornerPosition, WIN_SIZE, type Corner } from "./app/window-position.ts";
+import { cornerPosition, WIN_SIZE } from "./app/window-position.ts";
 import { configDir, loadConfig } from "./app/config.ts";
+import { argValue, safeCharacter, safeCorner } from "./app/cli.ts";
 import {
   createSessionTracker,
   buildSessionStates,
@@ -39,16 +40,11 @@ const WARM_MS = 2 * 60 * 1000; // open but idle
 const PRUNE_MS = 10 * 60 * 1000; // drop cold sessions
 const MAX_DOTS = 10;
 
-/** First value after a CLI flag, e.g. `--character capybara`. */
-function argValue(flag: string): string | undefined {
-  const i = process.argv.indexOf(flag);
-  return i !== -1 && process.argv[i + 1] ? process.argv[i + 1] : undefined;
-}
-
 const cfg = loadConfig();
-// Precedence: CLI flag > config file > default.
-const character = argValue("--character") || cfg.character || DEFAULT_CHARACTER;
-const corner = (argValue("--corner") as Corner | undefined) || cfg.corner;
+// Precedence: CLI flag > config file > default (each validated in cli.ts).
+const character =
+  safeCharacter(argValue(process.argv, "--character")) || safeCharacter(cfg.character) || DEFAULT_CHARACTER;
+const corner = safeCorner(argValue(process.argv, "--corner")) || safeCorner(cfg.corner);
 const userCharDir = join(configDir(), "characters", character);
 
 // Resolve the character assets in TS, then hand absolute paths to the shell.

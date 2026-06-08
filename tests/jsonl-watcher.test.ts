@@ -597,6 +597,21 @@ describe("getActiveSessionIds — sub-agent keepalive", () => {
     expect(w.getActiveSessionIds().has(SESSION_ID)).toBe(false);
   });
 
+  test("a session with only an exempt Task tool (no sub-agent progress) is NOT active", () => {
+    // Negative control: permission-exempt tools don't add to pendingTools, and with
+    // no agent_progress there's no active sub-agent — so the keepalive must not fire.
+    setSystemTime(NOW);
+    setupFs({
+      lines: [
+        { type: "assistant", message: { content: [{ type: "tool_use", id: "t1", name: "Task", input: {} }] } },
+      ],
+    });
+    const w = new JsonlWatcher();
+    w.start();
+    expect(w.getActiveSessionIds().has(SESSION_ID)).toBe(false);
+    w.stop();
+  });
+
   test("only valid UUID session ids are ever reported active", () => {
     setSystemTime(NOW);
     setupFs({
