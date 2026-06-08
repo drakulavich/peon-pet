@@ -39,6 +39,10 @@ export class SubAgentManager {
   has(sessionId: string): boolean {
     return this.windows.has(sessionId);
   }
+  /** All live (non-destroyed) sub-agent windows. */
+  liveWindows(): WindowHandle[] {
+    return [...this.windows.values()].filter((w) => !w.isDestroyed());
+  }
 
   private stackY(workHeight: number, index: number): number {
     return workHeight - SUB_AGENT_BASE_Y_OFFSET - (index + 1) * SUB_AGENT_SIZE;

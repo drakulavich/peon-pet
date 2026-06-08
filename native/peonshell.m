@@ -11,6 +11,15 @@
 
 #import <Cocoa/Cocoa.h>
 #import <WebKit/WebKit.h>
+#import <objc/runtime.h>
+
+// Callbacks into Bun (set via FFI from AppKitShell's JSCallbacks).
+typedef void (*PeonMessageCb)(void *panel, const char *type);
+typedef void (*PeonDockCb)(const char *id);
+static PeonMessageCb gMessageCb = NULL;
+static PeonDockCb gDockCb = NULL;
+static NSMenu *gDockMenu = nil;
+static const void *kPanelKey = &kPanelKey; // associated-object key: webview → panel
 
 // ── Asset registry (populated from TS at startup) ──────────────────────────────
 // Host-form character assets (peon-asset://<name>) → absolute file path, plus a
@@ -98,7 +107,7 @@ static bool gVerbose = false;
 static PeonSchemeHandler *gSchemeHandler = nil; // keep alive
 
 // ── Diagnostics delegate: navigation + page console/errors → stderr ───────────
-@interface PeonDelegate : NSObject <WKNavigationDelegate, WKScriptMessageHandler>
+@interface PeonDelegate : NSObject <WKNavigationDelegate, WKScriptMessageHandler, NSApplicationDelegate>
 @end
 
 @implementation PeonDelegate
@@ -115,8 +124,28 @@ static PeonSchemeHandler *gSchemeHandler = nil; // keep alive
 }
 - (void)userContentController:(WKUserContentController *)ucc
       didReceiveScriptMessage:(WKScriptMessage *)message {
-  fprintf(stderr, "[%s] %s\n", message.name.UTF8String,
-          [NSString stringWithFormat:@"%@", message.body].UTF8String);
+  if ([message.name isEqualToString:@"peon"] && gMessageCb) {
+    // Renderer → native (drag-start / drag-stop). Route to the owning panel.
+    NSPanel *panel = objc_getAssociatedObject(message.webView, kPanelKey);
+    NSString *type = nil;
+    if ([message.body isKindOfClass:[NSDictionary class]]) type = message.body[@"type"];
+    if (panel && type) gMessageCb((__bridge void *)panel, type.UTF8String);
+    return;
+  }
+  if (gVerbose) {
+    fprintf(stderr, "[%s] %s\n", message.name.UTF8String,
+            [NSString stringWithFormat:@"%@", message.body].UTF8String);
+  }
+}
+
+// Dock menu (Hide/Show/Quit). Items carry their id in representedObject.
+- (NSMenu *)applicationDockMenu:(NSApplication *)sender {
+  return gDockMenu;
+}
+- (void)peonDockAction:(NSMenuItem *)item {
+  if (gDockCb && [item.representedObject isKindOfClass:[NSString class]]) {
+    gDockCb(((NSString *)item.representedObject).UTF8String);
+  }
 }
 @end
 
@@ -155,6 +184,9 @@ void peon_init(void) {
   [NSApplication sharedApplication];
   [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
   if (!gAssetMap) gAssetMap = [NSMutableDictionary dictionary];
+  if (!gSchemeHandler) gSchemeHandler = [[PeonSchemeHandler alloc] init];
+  if (!gDelegate) gDelegate = [[PeonDelegate alloc] init];
+  [NSApp setDelegate:gDelegate]; // serves the dock menu
 }
 
 void peon_set_project_root(const char *root) {
@@ -247,6 +279,8 @@ void *peon_make_webview_panel(double x, double y, double w, double h) {
   web.layer.backgroundColor = [NSColor clearColor].CGColor;
 
   panel.contentView = web;
+  // Let the message handler find this panel from its web view.
+  objc_setAssociatedObject(web, kPanelKey, panel, OBJC_ASSOCIATION_ASSIGN);
   return (void *)CFBridgingRetain(panel);
 }
 
@@ -314,6 +348,33 @@ double peon_work_top(void) {
 double peon_cursor_x(void) { return [NSEvent mouseLocation].x; }
 double peon_cursor_y(void) { return [NSEvent mouseLocation].y; }
 
+// ── Callbacks + dock ──────────────────────────────────────────────────────────
+void peon_set_message_callback(void *cb) { gMessageCb = (PeonMessageCb)cb; }
+void peon_set_dock_callback(void *cb) { gDockCb = (PeonDockCb)cb; }
+
+void peon_set_dock_icon(const char *path) {
+  NSImage *img = [[NSImage alloc] initWithContentsOfFile:[NSString stringWithUTF8String:path]];
+  if (img) [NSApp setApplicationIconImage:img];
+}
+
+void peon_dock_menu_clear(void) { gDockMenu = [[NSMenu alloc] init]; }
+
+void peon_dock_menu_add(const char *id, const char *label) {
+  if (!gDockMenu) gDockMenu = [[NSMenu alloc] init];
+  NSMenuItem *item =
+      [[NSMenuItem alloc] initWithTitle:[NSString stringWithUTF8String:label]
+                                 action:@selector(peonDockAction:)
+                          keyEquivalent:@""];
+  item.target = gDelegate;
+  item.representedObject = [NSString stringWithUTF8String:id];
+  [gDockMenu addItem:item];
+}
+
+void peon_dock_menu_add_separator(void) {
+  if (!gDockMenu) gDockMenu = [[NSMenu alloc] init];
+  [gDockMenu addItem:[NSMenuItem separatorItem]];
+}
+
 void peon_run(void) { [NSApp run]; }
 
 // Cooperative pump: instead of blocking in [NSApp run] (which would freeze Bun's
@@ -327,7 +388,8 @@ static bool gFinishedLaunching = false;
 void peon_pump_begin(void) {
   if (gFinishedLaunching) return;
   [NSApp finishLaunching];
-  [NSApp activateIgnoringOtherApps:YES];
+  // Note: we deliberately do NOT activateIgnoringOtherApps — a pet must not steal
+  // focus. The non-activating panel + orderFrontRegardless still composites.
   gFinishedLaunching = true;
 }
 

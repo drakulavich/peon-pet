@@ -20,6 +20,15 @@ import {
 } from "./app/session-tracker.ts";
 import { JsonlWatcher, type SessionEvent } from "./app/jsonl-watcher.ts";
 import { WindowInteraction } from "./app/window-interaction.ts";
+import { SubAgentManager, SUB_AGENT_SIZE } from "./app/sub-agent-manager.ts";
+import { acquireSingleInstance } from "./app/single-instance.ts";
+import type { WindowHandle } from "./shell/types.ts";
+
+// Single-instance guard: bail if another peon-pet is already running.
+if (!(await acquireSingleInstance())) {
+  console.log("peon-pet is already running.");
+  process.exit(0);
+}
 
 const PROJECT_ROOT = join(import.meta.dir, "..");
 const ASSETS_DIR = join(PROJECT_ROOT, "renderer", "assets");
@@ -61,18 +70,68 @@ const assets = ASSET_NAMES.flatMap((name) => {
   return r ? [{ name, filePath: r.filePath }] : [];
 });
 
+const RENDERER_URL = "peon-asset://app/renderer/index.html";
 const shell = new AppKitShell({ projectRoot: PROJECT_ROOT, assets, verbose: DEV });
 
 const { width, height } = shell.getPrimaryWorkArea();
 const { x, y } = cornerPosition(cfg.corner, width, height);
 const win = shell.createWindow({ width: WIN_SIZE, height: WIN_SIZE, x, y });
-win.loadURL("peon-asset://app/renderer/index.html");
+win.loadURL(RENDERER_URL);
 win.show();
 
-// Hover → click-through toggling (drag wiring lands with the message bridge).
-const interaction = new WindowInteraction(shell, win, { draggable: true });
 const pumpHandle = shell.startPumping(16);
-const hoverHandle = setInterval(() => interaction.tick(), 50);
+
+// Per-window hover→click-through (+ drag for the main window). Pruned as windows die.
+const interactions: { it: WindowInteraction; win: WindowHandle }[] = [];
+interactions.push({ it: new WindowInteraction(shell, win, { draggable: true }), win });
+const hoverHandle = setInterval(() => {
+  for (let i = interactions.length - 1; i >= 0; i--) {
+    if (interactions[i].win.isDestroyed()) interactions.splice(i, 1);
+    else interactions[i].it.tick();
+  }
+}, 50);
+
+// ── Sub-agent mini-windows ────────────────────────────────────────────────────
+let petVisible = true;
+const subAgents = new SubAgentManager(shell, {
+  onWindowCreated: (subWin) => {
+    subWin.loadURL(RENDERER_URL);
+    if (petVisible) subWin.show();
+    else subWin.hide();
+    interactions.push({ it: new WindowInteraction(shell, subWin, { draggable: false }), win: subWin });
+    // Configure as a 100px sub-agent once the page has loaded.
+    setTimeout(() => {
+      if (subWin.isDestroyed()) return;
+      subWin.evaluateJS(
+        `window.__peonEmit('peon-config', ${JSON.stringify({ size: SUB_AGENT_SIZE, subAgent: true })})`,
+      );
+      subWin.evaluateJS(
+        `window.__peonEmit('peon-event', ${JSON.stringify({ anim: "waking", event: "SessionStart" })})`,
+      );
+    }, 500);
+  },
+});
+
+// ── Dock icon + Hide/Show/Quit menu ───────────────────────────────────────────
+const dockIcon = assets.find((a) => a.name === "dock-icon.png");
+if (dockIcon) shell.setDockIcon(dockIcon.filePath);
+
+function buildDockMenu(): void {
+  shell.setDockMenu([
+    { id: "toggle", label: petVisible ? "Hide Pet" : "Show Pet" },
+    { separator: true },
+    { id: "quit", label: "Quit" },
+  ]);
+}
+buildDockMenu();
+shell.onDockMenuClick((id) => {
+  if (id === "quit") return shutdown();
+  if (id === "toggle") {
+    petVisible = !petVisible;
+    for (const w of [win, ...subAgents.liveWindows()]) petVisible ? w.show() : w.hide();
+    buildDockMenu();
+  }
+});
 
 // ── Native → renderer ─────────────────────────────────────────────────────────
 function emit(channel: string, data: unknown): void {
@@ -137,10 +196,15 @@ function handleSessionEvent({ sessionId, event, cwd, timestamp }: SessionEvent):
 
 const watcher = new JsonlWatcher();
 watcher.on("session-event", handleSessionEvent);
+watcher.on("subagent-event", ({ parentToolId, event }: { parentToolId: string; event: string }) => {
+  if (event === "SubagentStart") subAgents.create(parentToolId);
+  else if (event === "SubagentStop") subAgents.destroy(parentToolId);
+});
 
-// Heartbeat: keep sessions with pending tools hot so the orc stays awake.
+// Heartbeat: keep sessions with pending tools hot, and sweep stale sub-agents.
 const heartbeat = setInterval(() => {
   const now = Date.now();
+  subAgents.sweepExpired();
   if (tracker.entries().length === 0) return;
   for (const id of watcher.getActiveSessionIds()) tracker.update(id, now);
   sendSessionUpdate(now);
@@ -155,6 +219,7 @@ function shutdown(): void {
   clearInterval(hoverHandle);
   clearInterval(heartbeat);
   watcher.stop();
+  subAgents.destroyAll();
   win.destroy();
   process.exit(0);
 }

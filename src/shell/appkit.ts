@@ -5,18 +5,19 @@
 // coordinates (like Electron). AppKit uses bottom-left full-screen coordinates.
 // All conversion happens here (design D3); the shim returns raw AppKit values.
 
-import { dlopen, FFIType } from "bun:ffi";
+import { CString, dlopen, FFIType, JSCallback, type Pointer } from "bun:ffi";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
-import type {
-  DockMenuItem,
-  NativeShell,
-  Point,
-  ShellMessage,
-  Size,
-  WindowHandle,
-  WindowOptions,
-  WorkArea,
+import {
+  parseShellMessage,
+  type DockMenuItem,
+  type NativeShell,
+  type Point,
+  type ShellMessage,
+  type Size,
+  type WindowHandle,
+  type WindowOptions,
+  type WorkArea,
 } from "./types.ts";
 
 const cstr = (s: string): Buffer => Buffer.from(s + "\0", "utf8");
@@ -47,6 +48,12 @@ function loadLib(dylibPath: string) {
     peon_run: { args: [], returns: FFIType.void },
     peon_pump_begin: { args: [], returns: FFIType.void },
     peon_pump: { args: [], returns: FFIType.void },
+    peon_set_message_callback: { args: [FFIType.ptr], returns: FFIType.void },
+    peon_set_dock_callback: { args: [FFIType.ptr], returns: FFIType.void },
+    peon_set_dock_icon: { args: [FFIType.cstring], returns: FFIType.void },
+    peon_dock_menu_clear: { args: [], returns: FFIType.void },
+    peon_dock_menu_add: { args: [FFIType.cstring, FFIType.cstring], returns: FFIType.void },
+    peon_dock_menu_add_separator: { args: [], returns: FFIType.void },
   });
 }
 
@@ -64,19 +71,25 @@ class AppKitWindow implements WindowHandle {
   #visible = true;
   #destroyed = false;
   #messageHandlers: ((msg: ShellMessage) => void)[] = [];
+  #onDestroy: () => void;
 
   constructor(
     id: number,
     ptr: ReturnType<Sym["peon_make_webview_panel"]>,
     sym: Sym,
     opts: WindowOptions,
-    conv: { toAppKitX: (x: number) => number; toAppKitY: (y: number, h: number) => number },
+    conv: {
+      toAppKitX: (x: number) => number;
+      toAppKitY: (y: number, h: number) => number;
+      onDestroy: () => void;
+    },
   ) {
     this.id = id;
     this.#ptr = ptr;
     this.#sym = sym;
     this.#toAppKitX = conv.toAppKitX;
     this.#toAppKitY = conv.toAppKitY;
+    this.#onDestroy = conv.onDestroy;
     this.#pos = { x: opts.x, y: opts.y };
     this.#size = { width: opts.width, height: opts.height };
     this.#ignoring = opts.ignoreMouseEvents ?? true;
@@ -120,15 +133,24 @@ class AppKitWindow implements WindowHandle {
     this.#sym.peon_panel_eval(this.#ptr, cstr(script));
   }
   onMessage(cb: (msg: ShellMessage) => void): void {
-    // Renderer→native messages (drag) are delivered in a later phase via a
-    // JSCallback bridge; handlers are retained here for that wiring.
     this.#messageHandlers.push(cb);
+  }
+
+  /** The native panel pointer — used by AppKitShell to route inbound messages. */
+  get nativePtr(): ReturnType<Sym["peon_make_webview_panel"]> {
+    return this.#ptr;
+  }
+
+  /** Deliver a validated renderer→native message to this window's handlers. */
+  dispatchMessage(msg: ShellMessage): void {
+    for (const cb of this.#messageHandlers) cb(msg);
   }
 
   destroy(): void {
     if (this.#destroyed) return;
     this.#destroyed = true;
     this.#sym.peon_panel_destroy(this.#ptr);
+    this.#onDestroy();
   }
   isDestroyed(): boolean {
     return this.#destroyed;
@@ -148,6 +170,11 @@ export interface AppKitShellOptions {
 export class AppKitShell implements NativeShell {
   #sym: Sym;
   #nextId = 1;
+  #windowsByPtr = new Map<number, AppKitWindow>();
+  #dockClickHandler: ((id: string) => void) | null = null;
+  // JSCallbacks must be retained for their lifetime, or the GC frees the trampoline.
+  #messageCb: JSCallback;
+  #dockCb: JSCallback;
 
   constructor(opts: AppKitShellOptions) {
     const dylib = opts.dylibPath ?? join(import.meta.dir, "..", "..", "native", "libpeonshell.dylib");
@@ -157,11 +184,31 @@ export class AppKitShell implements NativeShell {
     this.#sym = loadLib(dylib).symbols;
     this.#sym.peon_init();
     this.#sym.peon_set_verbose(opts.verbose ?? false);
-    // Finish app launch + activate BEFORE any window is created/shown, so panels
-    // actually composite under the cooperative pump.
+    // Finish app launch BEFORE any window is created/shown, so panels composite
+    // under the cooperative pump.
     this.#sym.peon_pump_begin();
     this.#sym.peon_set_project_root(cstr(opts.projectRoot));
     for (const a of opts.assets) this.#sym.peon_register_asset(cstr(a.name), cstr(a.filePath));
+
+    // Renderer → native (drag-start/stop): route to the owning window.
+    this.#messageCb = new JSCallback(
+      (panelPtr: Pointer, typePtr: Pointer) => {
+        const win = panelPtr ? this.#windowsByPtr.get(Number(panelPtr)) : undefined;
+        const msg = parseShellMessage({ type: typePtr ? new CString(typePtr).toString() : "" });
+        if (win && msg) win.dispatchMessage(msg);
+      },
+      { args: [FFIType.ptr, FFIType.ptr], returns: FFIType.void },
+    );
+    this.#sym.peon_set_message_callback(this.#messageCb.ptr);
+
+    // Dock menu clicks.
+    this.#dockCb = new JSCallback(
+      (idPtr: Pointer) => {
+        if (idPtr) this.#dockClickHandler?.(new CString(idPtr).toString());
+      },
+      { args: [FFIType.ptr], returns: FFIType.void },
+    );
+    this.#sym.peon_set_dock_callback(this.#dockCb.ptr);
   }
 
   #toAppKitX = (topX: number): number => this.#sym.peon_work_left() + topX;
@@ -175,10 +222,14 @@ export class AppKitShell implements NativeShell {
       opts.width,
       opts.height,
     );
-    return new AppKitWindow(this.#nextId++, ptr, this.#sym, opts, {
+    const key = ptr ? Number(ptr) : 0;
+    const win = new AppKitWindow(this.#nextId++, ptr, this.#sym, opts, {
       toAppKitX: this.#toAppKitX,
       toAppKitY: this.#toAppKitY,
+      onDestroy: () => this.#windowsByPtr.delete(key),
     });
+    if (ptr) this.#windowsByPtr.set(key, win);
+    return win;
   }
 
   getCursorPosition(): Point {
@@ -193,10 +244,21 @@ export class AppKitShell implements NativeShell {
     return { width: this.#sym.peon_work_width(), height: this.#sym.peon_work_height() };
   }
 
-  // Dock integration lands in a later phase; no-ops keep the interface satisfied.
-  setDockIcon(_iconPath: string): void {}
-  setDockMenu(_items: DockMenuItem[]): void {}
-  onDockMenuClick(_cb: (id: string) => void): void {}
+  setDockIcon(iconPath: string): void {
+    this.#sym.peon_set_dock_icon(cstr(iconPath));
+  }
+
+  setDockMenu(items: DockMenuItem[]): void {
+    this.#sym.peon_dock_menu_clear();
+    for (const item of items) {
+      if ("separator" in item) this.#sym.peon_dock_menu_add_separator();
+      else this.#sym.peon_dock_menu_add(cstr(item.id), cstr(item.label));
+    }
+  }
+
+  onDockMenuClick(cb: (id: string) => void): void {
+    this.#dockClickHandler = cb;
+  }
 
   /** Enter the AppKit run loop. Blocks; the GUI lives here. (Used by the spike.) */
   run(): void {

@@ -114,13 +114,17 @@ working.
       assets, create main window, load renderer, start `JsonlWatcher`, push events
       via `evaluateJS(window.__peonEmit(...))`, hover click-through via
       `WindowInteraction` + cursor poll. `bun run start:bun` / `dev:bun`.
-- [x] 6.2 Sub-agent windows: up to 5 stacked panels, positioning + TTL sweep ported
-      from `main.js` (`src/app/sub-agent-manager.ts`, done in Phase 2 — wiring to a
-      real shell still pending)
-- [ ] 6.3 Dock icon + menu (Hide/Show/Quit) via shell; `onDockMenuClick`
-- [ ] 6.4 Single-instance lock (lockfile/Unix socket in user data dir)
-- [~] 6.5 Drag-to-move logic done (`src/app/window-interaction.ts`, Phase 2);
-      end-to-end wiring + corner config honored still pending
+- [x] 6.2 Sub-agent windows wired in `main.ts`: `subagent-event` → `SubAgentManager`
+      create/destroy, per-window `WindowInteraction`, `onConfig({size:100})` +
+      waking pushed after load, TTL sweep in the heartbeat.
+- [x] 6.3 Dock icon + Hide/Show/Quit menu via the shell. Shim: `applicationDockMenu:`
+      + `peon_dock_menu_*` + `peon_set_dock_icon`; clicks routed to JS via a
+      `JSCallback` (`onDockMenuClick`).
+- [x] 6.4 Single-instance lock: `src/app/single-instance.ts` (Unix socket, stale-file
+      reclaim). Verified — 2nd launch prints "already running" and exits 0. +2 tests.
+- [x] 6.5 Drag-to-move end-to-end: renderer `peonBridge.startDrag/stopDrag` →
+      `WKScriptMessageHandler` → `JSCallback` → owning window's `onMessage` →
+      `WindowInteraction`. Corner config honored via `cornerPosition`.
 
 ## 7. Cut over and delete Electron ✅
 
