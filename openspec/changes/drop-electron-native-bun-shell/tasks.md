@@ -92,10 +92,23 @@ working.
       panel (real renderer, system WebKit, no Electron) — confirmed via screenshot.
 - [x] G5 background + sprite + borders all render (scheme handler + three.js + CORS).
 
+### 6.GATE — reactive behavior (USER runs this)
+- [ ] G6 `bun run dev:bun`, then use Claude Code → orc animates on events
+      (waking/typing/celebrate/alarmed); `--dev` prints `→ orc: <anim> (<event>)`.
+- [ ] G7 hover the orc → tooltip/session-dot info appears (click-through toggles).
+
 ## 6. Wire the app onto the shell
 
-- [ ] 6.1 `src/main.ts`: instantiate `AppKitShell`, create main window, start asset
-      server, start `JsonlWatcher`, push events via `evaluateJS`
+> Run-loop integration (was Open Issue 4.2): solved with a **cooperative pump** —
+> `AppKitShell.startPumping()` services the Cocoa run loop on a 16ms Bun timer
+> instead of blocking in `[NSApp run]`, so the JSONL watcher / cursor poll /
+> heartbeat keep running on Bun's loop. Verified: `main.ts` stays alive + renders.
+
+- [x] 6.1 `src/shell/appkit.ts` (`AppKitShell` implements `NativeShell` via the shim;
+      top-left↔AppKit coordinate conversion here) + `src/main.ts`: resolve+register
+      assets, create main window, load renderer, start `JsonlWatcher`, push events
+      via `evaluateJS(window.__peonEmit(...))`, hover click-through via
+      `WindowInteraction` + cursor poll. `bun run start:bun` / `dev:bun`.
 - [x] 6.2 Sub-agent windows: up to 5 stacked panels, positioning + TTL sweep ported
       from `main.js` (`src/app/sub-agent-manager.ts`, done in Phase 2 — wiring to a
       real shell still pending)

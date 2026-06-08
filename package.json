@@ -11,7 +11,9 @@
     "test:watch": "bun test --watch",
     "build:native": "clang -framework Cocoa -framework WebKit -dynamiclib -fobjc-arc -o native/libpeonshell.dylib native/peonshell.m",
     "spike": "bun run src/spike.ts",
-    "demo": "bun run src/demo-orc.ts"
+    "demo": "bun run src/demo-orc.ts",
+    "start:bun": "bun run build:native && bun run src/main.ts",
+    "dev:bun": "bun run build:native && bun run src/main.ts --dev"
   },
   "dependencies": {
     "three": "^0.183.0"

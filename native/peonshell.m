@@ -260,6 +260,19 @@ void peon_panel_load(void *panel, const char *url) {
   [web loadRequest:[NSURLRequest requestWithURL:nsurl]];
 }
 
+// Run JS in the panel's web view (native → renderer).
+void peon_panel_eval(void *panel, const char *js) {
+  WKWebView *web = (WKWebView *)((__bridge NSPanel *)panel).contentView;
+  [web evaluateJavaScript:[NSString stringWithUTF8String:js] completionHandler:nil];
+}
+
+// Destroy a panel (balances the CFBridgingRetain from creation).
+void peon_panel_destroy(void *panel) {
+  NSPanel *p = CFBridgingRelease(panel);
+  [p orderOut:nil];
+  [p close];
+}
+
 // ── Panel controls ────────────────────────────────────────────────────────────
 void peon_panel_show(void *panel) {
   [(__bridge NSPanel *)panel orderFrontRegardless];
@@ -279,4 +292,34 @@ double peon_primary_work_height(void) {
   return screen ? screen.visibleFrame.size.height : 0.0;
 }
 
+// Work area (visibleFrame, excludes menu bar + dock), AppKit bottom-left coords.
+// AppKitShell converts between these and its top-left convention.
+double peon_work_left(void) { return [NSScreen mainScreen].visibleFrame.origin.x; }
+double peon_work_width(void) { return [NSScreen mainScreen].visibleFrame.size.width; }
+double peon_work_height(void) { return [NSScreen mainScreen].visibleFrame.size.height; }
+// Top edge of the work area in AppKit coords (origin.y + height).
+double peon_work_top(void) {
+  NSRect vf = [NSScreen mainScreen].visibleFrame;
+  return vf.origin.y + vf.size.height;
+}
+
+// Global cursor position, raw AppKit screen coords (bottom-left origin).
+double peon_cursor_x(void) { return [NSEvent mouseLocation].x; }
+double peon_cursor_y(void) { return [NSEvent mouseLocation].y; }
+
 void peon_run(void) { [NSApp run]; }
+
+// Cooperative pump: instead of blocking in [NSApp run] (which would freeze Bun's
+// libuv loop and stop the JSONL watcher / cursor poll), Bun calls this on a timer
+// to service the Cocoa run loop in short slices. Keeps both event loops alive.
+static bool gFinishedLaunching = false;
+void peon_pump(void) {
+  if (!gFinishedLaunching) {
+    [NSApp finishLaunching];
+    gFinishedLaunching = true;
+  }
+  @autoreleasepool {
+    [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
+                             beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.006]];
+  }
+}
