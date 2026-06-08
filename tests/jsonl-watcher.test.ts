@@ -540,3 +540,88 @@ describe("subagent detection — background (subagents/ dir)", () => {
     expect(events.some((e) => e.event === "SubagentStart")).toBe(false);
   });
 });
+
+// ─── Sub-agent keepalive (getActiveSessionIds) ───────────────────────────────
+
+describe("getActiveSessionIds — sub-agent keepalive", () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+    jest.useRealTimers();
+    setSystemTime();
+  });
+
+  test("a session with an active foreground sub-agent is active despite no pending tools", () => {
+    setSystemTime(NOW);
+    setupFs({
+      lines: [{ type: "progress", parentToolUseID: "p1", data: { type: "agent_progress" } }],
+    });
+    const w = new JsonlWatcher();
+    w.start();
+    expect(w.getActiveSessionIds().has(SESSION_ID)).toBe(true);
+    w.stop();
+  });
+
+  test("the parent of a live background sub-agent file is active", () => {
+    jest.useFakeTimers();
+    setSystemTime(NOW);
+    setupFs({ subagentFiles: ["agent-bg1.jsonl"] });
+    const w = new JsonlWatcher();
+    w.start();
+    expect(w.getActiveSessionIds().has(SESSION_ID)).toBe(true);
+    w.stop();
+  });
+
+  test("session stops being active after the sub-agent turn ends", () => {
+    setSystemTime(NOW);
+    setupFs({
+      lines: [
+        { type: "progress", parentToolUseID: "p1", data: { type: "agent_progress" } },
+        { type: "system", subtype: "turn_duration" },
+      ],
+    });
+    const w = new JsonlWatcher();
+    w.start();
+    // turn_duration cleared activeSubagentToolIds and there are no pending tools.
+    expect(w.getActiveSessionIds().has(SESSION_ID)).toBe(false);
+    w.stop();
+  });
+
+  test("parent stops being active after the background sub-agent goes stale", () => {
+    jest.useFakeTimers();
+    setSystemTime(NOW);
+    setupFs({ subagentFiles: ["agent-idle.jsonl"] });
+    const w = new JsonlWatcher();
+    w.start();
+    expect(w.getActiveSessionIds().has(SESSION_ID)).toBe(true);
+    jest.advanceTimersByTime(5_000); // idle → torn down + removed from file states
+    expect(w.getActiveSessionIds().has(SESSION_ID)).toBe(false);
+  });
+
+  test("a session with only an exempt Task tool (no sub-agent progress) is NOT active", () => {
+    // Negative control: permission-exempt tools don't add to pendingTools, and with
+    // no agent_progress there's no active sub-agent — so the keepalive must not fire.
+    setSystemTime(NOW);
+    setupFs({
+      lines: [
+        { type: "assistant", message: { content: [{ type: "tool_use", id: "t1", name: "Task", input: {} }] } },
+      ],
+    });
+    const w = new JsonlWatcher();
+    w.start();
+    expect(w.getActiveSessionIds().has(SESSION_ID)).toBe(false);
+    w.stop();
+  });
+
+  test("only valid UUID session ids are ever reported active", () => {
+    setSystemTime(NOW);
+    setupFs({
+      lines: [{ type: "progress", parentToolUseID: "p1", data: { type: "agent_progress" } }],
+    });
+    const w = new JsonlWatcher();
+    w.start();
+    for (const id of w.getActiveSessionIds()) {
+      expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+    }
+    w.stop();
+  });
+});

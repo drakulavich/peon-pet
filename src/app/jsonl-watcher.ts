@@ -91,11 +91,21 @@ export class JsonlWatcher extends EventEmitter {
     this._scanInterval = setInterval(() => this._scan(), SCAN_INTERVAL_MS);
   }
 
-  // Returns session IDs that currently have unresolved tool_use calls
+  // Session IDs that should be kept "hot" by the heartbeat: those with unresolved
+  // tool_use calls, OR those running a sub-agent — foreground (`agent_progress`
+  // tracked in `activeSubagentToolIds`) or background (a live `subagents/` file,
+  // whose `sessionId` is the parent). The sub-agent cases keep the parent orc awake
+  // during long sub-agent tasks, where the parent transcript may go quiet and the
+  // `Task`/`Agent` tools are permission-exempt (so not counted as pending).
   getActiveSessionIds(): Set<string> {
     const active = new Set<string>();
     for (const state of this._fileStates.values()) {
-      if (!state.isSubagentFile && (state.pendingTools?.size ?? 0) > 0) {
+      if (state.isSubagentFile) {
+        // Live background sub-agent → parent stays active. This decays ONLY because
+        // `_watchSubagentFile` always arms a stale timer that deletes the file state
+        // after SUBAGENT_IDLE_MS; don't drop that invariant or sessions stick active.
+        active.add(state.sessionId);
+      } else if ((state.pendingTools?.size ?? 0) > 0 || (state.activeSubagentToolIds?.size ?? 0) > 0) {
         active.add(state.sessionId);
       }
     }

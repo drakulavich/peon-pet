@@ -1,17 +1,17 @@
 // peon-pet entrypoint (Bun + AppKit). Composition root: wires the AppKit shell,
 // the asset resolver, the JSONL watcher, and the session tracker so the orc
-// reacts to Claude Code events. Port of main.js's orchestration (main window;
-// sub-agent windows / dock menu / remote relay land in later phases).
+// reacts to Claude Code events. Port of main.js's orchestration.
 //
-//   bun run build:native && bun run src/main.ts
+//   bun run build:native && bun run src/main.ts [--character <name>] [--corner <c>]
 
 import { join, basename } from "node:path";
-import { homedir } from "node:os";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { AppKitShell } from "./shell/appkit.ts";
 import { resolveAsset } from "./app/asset-resolver.ts";
 import { DEFAULT_CHARACTER } from "./app/characters.ts";
-import { cornerPosition, WIN_SIZE, type Corner } from "./app/window-position.ts";
+import { cornerPosition, WIN_SIZE } from "./app/window-position.ts";
+import { configDir, loadConfig } from "./app/config.ts";
+import { argValue, safeCharacter, safeCorner } from "./app/cli.ts";
 import {
   createSessionTracker,
   buildSessionStates,
@@ -40,29 +40,20 @@ const WARM_MS = 2 * 60 * 1000; // open but idle
 const PRUNE_MS = 10 * 60 * 1000; // drop cold sessions
 const MAX_DOTS = 10;
 
-interface PetConfig {
-  character?: string;
-  corner?: Corner;
-}
-
-function loadConfig(): PetConfig {
-  const p = join(homedir(), "Library", "Application Support", "peon-pet", "peon-pet-config.json");
-  try {
-    return JSON.parse(readFileSync(p, "utf8"));
-  } catch {
-    return {};
-  }
-}
-
 const cfg = loadConfig();
-const character = cfg.character || DEFAULT_CHARACTER;
+// Precedence: CLI flag > config file > default (each validated in cli.ts).
+const character =
+  safeCharacter(argValue(process.argv, "--character")) || safeCharacter(cfg.character) || DEFAULT_CHARACTER;
+const corner = safeCorner(argValue(process.argv, "--corner")) || safeCorner(cfg.corner);
+const userCharDir = join(configDir(), "characters", character);
 
 // Resolve the character assets in TS, then hand absolute paths to the shell.
+// User-installed files under userCharDir take precedence over bundled ones.
 const assetCtx = {
   character,
   projectRoot: PROJECT_ROOT,
   assetsDir: ASSETS_DIR,
-  userCharDir: null,
+  userCharDir,
   fileExists: existsSync,
 };
 const assets = ASSET_NAMES.flatMap((name) => {
@@ -74,7 +65,7 @@ const RENDERER_URL = "peon-asset://app/renderer/index.html";
 const shell = new AppKitShell({ projectRoot: PROJECT_ROOT, assets, verbose: DEV });
 
 const { width, height } = shell.getPrimaryWorkArea();
-const { x, y } = cornerPosition(cfg.corner, width, height);
+const { x, y } = cornerPosition(corner, width, height);
 const win = shell.createWindow({ width: WIN_SIZE, height: WIN_SIZE, x, y });
 win.loadURL(RENDERER_URL);
 win.show();

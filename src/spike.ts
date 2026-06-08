@@ -28,7 +28,7 @@ const { symbols: shim } = dlopen(DYLIB, {
   peon_panel_show: { args: [FFIType.ptr], returns: FFIType.void },
   peon_panel_set_ignore_mouse: { args: [FFIType.ptr, FFIType.bool], returns: FFIType.void },
   peon_panel_set_origin: { args: [FFIType.ptr, FFIType.f64, FFIType.f64], returns: FFIType.void },
-  peon_primary_work_height: { args: [], returns: FFIType.f64 },
+  peon_work_height: { args: [], returns: FFIType.f64 },
   peon_run: { args: [], returns: FFIType.void },
 });
 
@@ -45,7 +45,7 @@ if (!panel) {
   process.exit(1);
 }
 console.log(`✓ peon_make_panel: NSPanel created at (${MARGIN}, ${MARGIN}) ${SIZE}×${SIZE}`);
-console.log(`✓ peon_primary_work_height: ${shim.peon_primary_work_height()}px`);
+console.log(`✓ peon_work_height (primary): ${shim.peon_work_height()}px`);
 
 if (process.argv.includes("--check")) {
   // Headless plumbing check — prove FFI binds and the panel is created without

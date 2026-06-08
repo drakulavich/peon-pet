@@ -90,6 +90,33 @@ describe("resolveAsset — character assets", () => {
     const c = ctx({ present: [] });
     expect(resolveAsset("peon-asset://sprite-atlas.png", c)).toBeNull();
   });
+
+  test("user-dir override applies to dock-icon.png too", () => {
+    const userDir = "/home/u/.peon/characters/orc";
+    const c = ctx({
+      userCharDir: userDir,
+      present: [join(userDir, "dock-icon.png"), join(ASSETS, "orc-dock-icon.png")],
+    });
+    expect(resolveAsset("peon-asset://dock-icon.png", c)?.filePath).toBe(join(userDir, "dock-icon.png"));
+  });
+
+  test("unknown character falls back to the orc bundled asset", () => {
+    const c = ctx({ character: "dragon", present: [join(ASSETS, "orc-sprite-atlas.png")] });
+    expect(resolveAsset("peon-asset://sprite-atlas.png", c)?.filePath).toBe(
+      join(ASSETS, "orc-sprite-atlas.png"),
+    );
+  });
+
+  test("partial user override: overridden asset from user dir, others fall back to bundled", () => {
+    const userDir = "/home/u/.peon/characters/orc";
+    const c = ctx({
+      userCharDir: userDir,
+      present: [join(userDir, "sprite-atlas.png"), join(ASSETS, "orc-borders.png")],
+    });
+    // sprite-atlas overridden by the user; borders has no user file → bundled.
+    expect(resolveAsset("peon-asset://sprite-atlas.png", c)?.filePath).toBe(join(userDir, "sprite-atlas.png"));
+    expect(resolveAsset("peon-asset://borders.png", c)?.filePath).toBe(join(ASSETS, "orc-borders.png"));
+  });
 });
 
 // ─── renderer files (path form) ───────────────────────────────────────────────
