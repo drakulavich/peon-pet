@@ -92,10 +92,15 @@ working.
       panel (real renderer, system WebKit, no Electron) — confirmed via screenshot.
 - [x] G5 background + sprite + borders all render (scheme handler + three.js + CORS).
 
-### 6.GATE — reactive behavior (USER runs this)
-- [ ] G6 `bun run dev:bun`, then use Claude Code → orc animates on events
-      (waking/typing/celebrate/alarmed); `--dev` prints `→ orc: <anim> (<event>)`.
+### 6.GATE — reactive behavior
+- [x] G6 ✅ on-device: orc renders bottom-left and animates on events (confirmed
+      typing pose + 2 green session dots via screenshot); `--dev` logs
+      `→ orc: typing (UserPromptSubmit)` / `celebrate (Stop)` against the live session.
 - [ ] G7 hover the orc → tooltip/session-dot info appears (click-through toggles).
+
+> Follow-up (6b polish): `peon_pump_begin` uses `activateIgnoringOtherApps:YES`,
+> which steals focus once at launch. A pet shouldn't; revisit with a gentler
+> activation now that compositing is proven.
 
 ## 6. Wire the app onto the shell
 
