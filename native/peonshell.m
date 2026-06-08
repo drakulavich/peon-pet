@@ -275,7 +275,14 @@ void peon_panel_destroy(void *panel) {
 
 // ── Panel controls ────────────────────────────────────────────────────────────
 void peon_panel_show(void *panel) {
-  [(__bridge NSPanel *)panel orderFrontRegardless];
+  NSPanel *p = (__bridge NSPanel *)panel;
+  [p orderFrontRegardless];
+  if (gVerbose) {
+    NSRect f = p.frame;
+    fprintf(stderr, "[show] frame=(%.0f,%.0f %0.fx%.0f) visible=%d onActiveSpace=%d\n",
+            f.origin.x, f.origin.y, f.size.width, f.size.height, p.isVisible,
+            p.isOnActiveSpace);
+  }
 }
 void peon_panel_hide(void *panel) {
   [(__bridge NSPanel *)panel orderOut:nil];
@@ -312,14 +319,30 @@ void peon_run(void) { [NSApp run]; }
 // Cooperative pump: instead of blocking in [NSApp run] (which would freeze Bun's
 // libuv loop and stop the JSONL watcher / cursor poll), Bun calls this on a timer
 // to service the Cocoa run loop in short slices. Keeps both event loops alive.
+//
+// peon_pump_begin MUST run before any window is shown: it finishes app launch and
+// activates so windows actually composite. Then peon_pump (on a Bun timer) drains
+// events and services timers/CoreAnimation each tick.
 static bool gFinishedLaunching = false;
+void peon_pump_begin(void) {
+  if (gFinishedLaunching) return;
+  [NSApp finishLaunching];
+  [NSApp activateIgnoringOtherApps:YES];
+  gFinishedLaunching = true;
+}
+
 void peon_pump(void) {
-  if (!gFinishedLaunching) {
-    [NSApp finishLaunching];
-    gFinishedLaunching = true;
-  }
+  if (!gFinishedLaunching) peon_pump_begin();
   @autoreleasepool {
+    NSEvent *e;
+    while ((e = [NSApp nextEventMatchingMask:NSEventMaskAny
+                                   untilDate:nil
+                                      inMode:NSDefaultRunLoopMode
+                                     dequeue:YES])) {
+      [NSApp sendEvent:e];
+    }
+    // Service timers / observers / CoreAnimation commits briefly.
     [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
-                             beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.006]];
+                             beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.004]];
   }
 }

@@ -45,6 +45,7 @@ function loadLib(dylibPath: string) {
     peon_cursor_x: { args: [], returns: FFIType.f64 },
     peon_cursor_y: { args: [], returns: FFIType.f64 },
     peon_run: { args: [], returns: FFIType.void },
+    peon_pump_begin: { args: [], returns: FFIType.void },
     peon_pump: { args: [], returns: FFIType.void },
   });
 }
@@ -156,6 +157,9 @@ export class AppKitShell implements NativeShell {
     this.#sym = loadLib(dylib).symbols;
     this.#sym.peon_init();
     this.#sym.peon_set_verbose(opts.verbose ?? false);
+    // Finish app launch + activate BEFORE any window is created/shown, so panels
+    // actually composite under the cooperative pump.
+    this.#sym.peon_pump_begin();
     this.#sym.peon_set_project_root(cstr(opts.projectRoot));
     for (const a of opts.assets) this.#sym.peon_register_asset(cstr(a.name), cstr(a.filePath));
   }
