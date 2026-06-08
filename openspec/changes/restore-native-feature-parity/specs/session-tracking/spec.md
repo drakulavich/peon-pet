@@ -2,32 +2,27 @@
 
 ## ADDED Requirements
 
-### Requirement: Remote relay sessions are tracked and animated
+### Requirement: Parent sessions stay active while a sub-agent runs
 
-The system SHALL periodically read a relay's `/state` endpoint and merge the remote
-sessions it reports into the session tracker, so sessions from other machines
-appear as dots and drive animations.
+The system SHALL treat a session as active (eligible to be kept hot by the
+heartbeat) while it has an active sub-agent, even if the session has no pending
+non-exempt tools, so the orc does not fall asleep during long sub-agent tasks.
 
-#### Scenario: Remote session appears and animates
+#### Scenario: Foreground sub-agent keeps the parent active
 
-- **WHEN** the relay reports a session with a known event (e.g. `UserPromptSubmit`)
-  that differs from the last event seen for that session
-- **THEN** the session is added/updated in the tracker (relay Unix-seconds
-  timestamp converted to milliseconds)
-- **AND** the mapped animation is emitted once for that change
+- **WHEN** a session has an active foreground sub-agent (an `agent_progress` record
+  seen, no matching stop yet) and no pending non-exempt tools
+- **THEN** the session is reported among the active session ids
+- **AND** the heartbeat refreshes its timestamp, keeping the orc awake
 
-#### Scenario: Same event is not re-animated
+#### Scenario: Background sub-agent keeps the parent active
 
-- **WHEN** the relay reports the same event for a session across two polls
-- **THEN** no duplicate animation is emitted for it
+- **WHEN** a live background sub-agent file (`<session>/subagents/agent-*.jsonl`)
+  exists for a parent session
+- **THEN** that parent session is reported among the active session ids
 
-#### Scenario: Dropped remote session is removed
+#### Scenario: Stops keeping the session active when the sub-agent ends
 
-- **WHEN** the relay stops reporting a previously-seen remote session
-- **THEN** that session is removed from the tracker and its cwd entry cleared
-
-#### Scenario: Invalid relay data is ignored
-
-- **WHEN** the relay returns no state, an unreachable endpoint, or an entry with an
-  invalid session id
-- **THEN** the tracker is unchanged and no error is surfaced to the user
+- **WHEN** the sub-agent ends (the turn completes, or the background sub-agent file
+  goes stale and is torn down) and the session has no other activity
+- **THEN** the session is no longer reported active and may decay normally

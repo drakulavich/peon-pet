@@ -16,7 +16,7 @@ each independently reviewable:
 
 1. **Custom characters + `--character`** — small, high value, no FFI.
 2. **Config-dir resolution** — small, unblocks #1's `characters/` lookup.
-3. **Remote relay sync** — medium, pure + testable, no FFI.
+3. **Native sub-agent keepalive** — small, pure + testable, no FFI.
 4. **Primary-display correctness** — small native accessor + wiring.
 
 ## Decisions
@@ -43,16 +43,27 @@ Define `configDir()` returning the first of:
 
 `loadConfig()` and the `characters/` lookup both use it. (See Open Question 2.)
 
-### D4. Remote relay as a pure, tested unit
+### D4. Native sub-agent keepalive (relay dropped)
 
-New `src/app/remote-relay.ts`: a `RemoteRelay` object owning `remoteSessionIds` +
-`remoteLastEvents`, with a pure `merge(state, { tracker, sessionCwds })` that
-returns the animations to emit and mutates the tracker/cwd map exactly as
-`syncRemoteSessionsToTracker` did (relay timestamps are Unix **seconds** → ×1000;
-emit an anim only when a remote session's event *changes*; drop sessions the relay
-stops reporting). `main.ts` owns the `fetch` + interval; the merge logic is unit
-tested with a fake tracker — no network in tests (Zakharchenko: intercept at the
-seam). Bun's global `fetch` + `AbortSignal.timeout(150)` replace Electron `net`.
+The relay's real job here was a keepalive: keep the **parent** orc awake while a
+sub-agent runs. We fix that locally instead of resurrecting a network dependency.
+
+`JsonlWatcher` already tracks sub-agents — `activeSubagentToolIds` per main-session
+file (foreground `agent_progress`) and a `FileState{isSubagentFile, sessionId:
+parentId}` per live background `subagents/` file. Extend
+`getActiveSessionIds()` to return, in addition to sessions with pending non-exempt
+tools, **any session that currently has an active sub-agent** (foreground:
+`activeSubagentToolIds.size > 0`; background: the parent `sessionId` of any live
+sub-agent file). The heartbeat in `main.ts` already does
+`for (id of watcher.getActiveSessionIds()) tracker.update(id, now)`, so this alone
+keeps the parent hot — no `main.ts` change, no `fetch`, no `remoteUrl`.
+
+This is a pure change to one method; unit-test it: a session with an active
+foreground sub-agent (and one with a live background sub-agent file) is reported
+active even when it has no pending tools, and stops being reported once the
+sub-agent stops. Delete `readRemoteState` / `syncRemoteSessionsToTracker` /
+`remoteUrl` from the ported surface (they never made it into `main.ts`, so this is
+just *not* adding them).
 
 ### D5. Primary display
 
@@ -64,22 +75,24 @@ placement and cursor hit-testing share one coordinate space.
 
 ## Open questions
 
-1. **Is the relay still used?** The `127.0.0.1:19998` relay is part of the
-   multi-machine peon-ping setup. If it's deprecated, drop gap #2 entirely.
-   *Recommendation:* port it for parity unless the relay is confirmed dead.
-2. **Config-dir strategy.** Read the old Electron `Peon Pet` dir for a seamless
+1. **Config-dir strategy.** Read the old Electron `Peon Pet` dir for a seamless
    upgrade, or start clean at `peon-pet` and let users re-configure?
    *Recommendation:* prefer-existing (D3) — least surprise for current users.
-3. **`--corner` CLI flag too?** The old build only had it in config. Cheap to add
+2. **`--corner` CLI flag too?** The old build only had it in config. Cheap to add
    alongside `--character`. *Recommendation:* add it; it's two lines.
-4. **Primary vs. "display under the menu bar where the dock is."** On exotic
+3. **Primary vs. "display under the menu bar where the dock is."** On exotic
    multi-display arrangements "primary" can be ambiguous. *Recommendation:* primary
    display (menu-bar screen); defer follow-the-cursor behavior (non-goal).
 
+> Resolved: the `127.0.0.1:19998` relay is **dropped** (D4) — its only real job here
+> was a keepalive, now handled locally. Multi-machine aggregation is a non-goal.
+
 ## Risks / trade-offs
 
-- **Relay network calls** can hang; reuse the 150ms `AbortSignal.timeout` and never
-  block the pump. Failures are swallowed (best-effort, like the old build).
+- **Sub-agent keepalive** must also *stop* keeping a session hot once the sub-agent
+  ends, or a finished session never decays. The watcher already clears
+  `activeSubagentToolIds` on `turn_duration` and tears down stale background files,
+  so this falls out — but the test must cover the stop transition.
 - **Config-dir migration** could read a stale Electron config; acceptable — it's the
   user's own prior setting.
 - **Primary-display FFI** is the only new native surface; cover it in the manual

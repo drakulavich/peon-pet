@@ -22,17 +22,19 @@ Four independent gaps, highest user value first. Each leaves the app working.
 - [ ] 2.4 Manual: drop a custom `sprite-atlas.png` in
       `<configDir>/characters/orc/` → the pet uses it.
 
-## 3. Remote relay sync
+## 3. Native sub-agent keepalive (relay dropped)
 
-- [ ] 3.1 `src/app/remote-relay.ts`: `RemoteRelay` with `merge(state, ctx)` porting
-      `syncRemoteSessionsToTracker` (Unix-seconds → ms, emit-on-change, drop-absent).
-      Pure; no network.
-- [ ] 3.2 Unit-test merge: add/update remote sessions, anim only on event change,
-      removal when the relay drops a session, invalid session-id filtering.
-- [ ] 3.3 `main.ts`: poll `config.remoteUrl` (default `http://127.0.0.1:19998`)
-      `/state` every 5s via Bun `fetch` + `AbortSignal.timeout(150)`; feed
-      `RemoteRelay.merge`; emit returned anims + `sendSessionUpdate`. Best-effort
-      (swallow errors). Gate on Open Question 1.
+- [ ] 3.1 `src/app/jsonl-watcher.ts`: extend `getActiveSessionIds()` to also report a
+      session that has an active sub-agent — foreground
+      (`activeSubagentToolIds.size > 0`) or background (parent `sessionId` of a live
+      `subagents/` file). No `main.ts` change (heartbeat already refreshes these ids).
+- [ ] 3.2 Unit-test: a session with an active foreground sub-agent (and one with a
+      live background sub-agent file) is reported active despite no pending tools,
+      and is **no longer** reported once the sub-agent stops (`turn_duration` /
+      stale teardown).
+- [ ] 3.3 Confirm nothing reintroduces `remoteUrl` / `readRemoteState` /
+      `syncRemoteSessionsToTracker`; manual: run a long sub-agent task → orc stays
+      awake (no relay running).
 
 ## 4. Primary-display correctness
 
@@ -45,9 +47,9 @@ Four independent gaps, highest user value first. Each leaves the app working.
 
 ## 5. Verification
 
-- [ ] 5.1 `bun test` green (new config + relay + resolver tests).
+- [ ] 5.1 `bun test` green (new config + keepalive + resolver tests).
 - [ ] 5.2 `tsc --noEmit` clean.
-- [ ] 5.3 Manual smoke: custom skin loads; a relayed session shows a dot + animates;
-      `--character capybara` switches the skin; correct screen on multi-monitor.
+- [ ] 5.3 Manual smoke: custom skin loads; orc stays awake through a long sub-agent
+      task; `--character capybara` switches the skin; correct screen on multi-monitor.
 - [ ] 5.4 Re-measure idle memory at full parity; update the migration's
       `benchmarks.md`.
