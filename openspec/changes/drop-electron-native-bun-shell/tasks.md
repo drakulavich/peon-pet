@@ -146,8 +146,9 @@ Run on the target macOS version; all must pass before merge:
 - [ ] 8.6 Animations fire on real Claude Code events (waking/typing/celebrate/…)
 - [ ] 8.7 Sub-agent mini-pets appear (≤5), stack, and disappear on stop/TTL
 - [ ] 8.8 Dock menu Hide/Show/Quit work; second launch is blocked
-- [ ] 8.9 Idle memory + CPU measured and recorded vs. the old Electron build
-      (Dana's scenario — capture the win)
+- [x] 8.9 Idle memory measured vs. the old Electron build → `benchmarks.md`.
+      Electron 713.7 MB / 6 procs / 276 MB disk → Bun 439.7 MB / 4 procs / 76 KB shim
+      (−38% RSS, −99.97% per-app disk). Caveat: Bun is main-window-only so far.
 
 ## 9. Spec sync
 
