@@ -8,9 +8,13 @@
 
   <key>ProgramArguments</key>
   <array>
-    <string>ELECTRON_BIN_PLACEHOLDER</string>
-    <string>APP_DIR_PLACEHOLDER</string>
+    <string>BUN_BIN_PLACEHOLDER</string>
+    <string>run</string>
+    <string>APP_DIR_PLACEHOLDER/src/main.ts</string>
   </array>
+
+  <key>WorkingDirectory</key>
+  <string>APP_DIR_PLACEHOLDER</string>
 
   <key>RunAtLoad</key>
   <true/>

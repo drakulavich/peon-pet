@@ -1,31 +1,36 @@
 #!/usr/bin/env bash
 # Install peon-pet as a macOS LaunchAgent so it runs at login and stays alive.
+# Native Bun build — no Electron.
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ELECTRON="$SCRIPT_DIR/node_modules/.bin/electron"
 PLIST_SRC="$SCRIPT_DIR/com.peonpet.app.plist"
 PLIST_DEST="$HOME/Library/LaunchAgents/com.peonpet.app.plist"
 
-if [ ! -f "$ELECTRON" ]; then
-  echo "Electron not found. Run: npm install"
+# Locate bun (launchd needs an absolute path).
+BUN="$(command -v bun || true)"
+[ -z "$BUN" ] && [ -x "$HOME/.bun/bin/bun" ] && BUN="$HOME/.bun/bin/bun"
+if [ -z "$BUN" ]; then
+  echo "bun not found. Install it: https://bun.sh"
   exit 1
 fi
+BUN_REAL="$(readlink -f "$BUN" 2>/dev/null || realpath "$BUN")"
 
-# Resolve symlink to the real binary (launchd needs the real path)
-ELECTRON_REAL="$(readlink -f "$ELECTRON" 2>/dev/null || realpath "$ELECTRON")"
+# Build the native AppKit shim (libpeonshell.dylib is gitignored).
+echo "Building native shim..."
+( cd "$SCRIPT_DIR" && "$BUN" run build:native )
 
 echo "Installing peon-pet LaunchAgent..."
-echo "  App dir:  $SCRIPT_DIR"
-echo "  Electron: $ELECTRON_REAL"
+echo "  App dir: $SCRIPT_DIR"
+echo "  Bun:     $BUN_REAL"
 
-# Write the final plist with real paths substituted
+# Write the final plist with real paths substituted.
 sed \
-  -e "s|ELECTRON_BIN_PLACEHOLDER|$ELECTRON_REAL|g" \
+  -e "s|BUN_BIN_PLACEHOLDER|$BUN_REAL|g" \
   -e "s|APP_DIR_PLACEHOLDER|$SCRIPT_DIR|g" \
   "$PLIST_SRC" > "$PLIST_DEST"
 
-# Unload any existing instance before loading
+# Unload any existing instance before loading.
 launchctl unload "$PLIST_DEST" 2>/dev/null || true
 launchctl load -w "$PLIST_DEST"
 

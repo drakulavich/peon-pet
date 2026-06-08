@@ -122,14 +122,17 @@ working.
 - [~] 6.5 Drag-to-move logic done (`src/app/window-interaction.ts`, Phase 2);
       end-to-end wiring + corner config honored still pending
 
-## 7. Cut over and delete Electron
+## 7. Cut over and delete Electron ✅
 
-- [ ] 7.1 `package.json`: `start`/`dev` → `bun src/main.ts`; remove `electron`,
-      `canvas` (if unused), `boolean` override
-- [ ] 7.2 Delete `main.js`, `preload.js`, `patches/boolean-shim`
-- [ ] 7.3 Update `install.sh` + `com.peonpet.app.plist` to launch Bun
-- [ ] 7.4 Update `README.md` (Electron→Bun/AppKit, `npm start`→`bun run start`)
-      and `CHANGELOG.md`
+- [x] 7.1 `package.json`: `start`/`dev` → `bun run build:native && bun src/main.ts`;
+      removed `electron` + `boolean` override. (`canvas` kept — used by
+      `scripts/gen-*.js`.)
+- [x] 7.2 Deleted `main.js`, `preload.js`, `patches/boolean-shim`, **and** the now-dead
+      `lib/*.js` (superseded by `src/app/*.ts`).
+- [x] 7.3 `install.sh` + `com.peonpet.app.plist` launch Bun (`bun run <app>/src/main.ts`),
+      building the native shim at install time.
+- [x] 7.4 Updated `README.md` (Bun/AppKit, architecture, `bun run start`) and
+      `CHANGELOG.md`. Verified: 138 tests, `tsc` clean, `bun run start` launches.
 
 ## 8. Manual macOS smoke checklist (the gate — FFI is not unit-tested)
 

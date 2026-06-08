@@ -1,6 +1,6 @@
 # peon-pet
 
-A macOS desktop pet for [Peon-Ping](https://peonping.com) — an orc that reacts to your Claude Code events with sprite animations. Built on Electron + Three.js.
+A macOS desktop pet for [Peon-Ping](https://peonping.com) — an orc that reacts to your Claude Code events with sprite animations. Built on **Bun + AppKit + Three.js** (no Electron — a native `NSPanel` driven via `bun:ffi`, rendering the Three.js scene in system WebKit).
 
 <video src="https://github.com/user-attachments/assets/7fd9a2cb-d227-49ad-8ccc-7953ec392a2d" autoplay loop muted playsinline width="400"></video>
 
@@ -8,8 +8,9 @@ Sits in the bottom-left corner of your screen, floats over all windows, and igno
 
 ## Requirements
 
-- macOS (Linux/Windows untested)
-- Node.js 18+
+- macOS (the shell is AppKit-native; Linux/Windows are non-goals)
+- [Bun](https://bun.sh) 1.3+
+- Xcode Command Line Tools (`clang`, to build the native shim) — `xcode-select --install`
 - [peon-ping](https://peonping.com) installed and running
 
 ## Quick start
@@ -17,11 +18,12 @@ Sits in the bottom-left corner of your screen, floats over all windows, and igno
 ```bash
 git clone <repo> peon-pet
 cd peon-pet
-npm install
-npm start
+bun install
+bun run start      # builds the native shim, then launches the pet
 ```
 
-Check your dock for the Peon-Ping logo — right-click it for controls.
+`bun run start` compiles `native/libpeonshell.dylib` (a tiny AppKit shim) and runs
+`src/main.ts`. Check your dock for the Peon-Ping logo.
 
 ## Install permanently (auto-start at login)
 
@@ -37,12 +39,12 @@ To remove:
 ./uninstall.sh
 ```
 
-## Dock controls
+## Controls
 
-Right-click the dock icon:
+Quit with `Ctrl-C` (foreground) or `./uninstall.sh` (LaunchAgent).
 
-- **Hide Pet** / **Show Pet** — toggle visibility without quitting
-- **Quit** — exit completely
+> The right-click dock menu (Hide / Show / Quit) and drag-to-move are being
+> reimplemented on the native shell — see the OpenSpec change under `openspec/`.
 
 ## Animations
 
@@ -67,36 +69,36 @@ Sessions are removed when Claude Code fires `SessionEnd`, or automatically after
 
 Hover over a dot to see the project folder and status. Hover anywhere on the widget to see all active project names.
 
-## Dependencies
+## Architecture
 
-- **boolean**: Replaced with a local shim (`patches/boolean-shim`) via `overrides` so the deprecated `boolean` package is not installed. The shim matches the same API (`boolean`, `isBooleanable`).
-- **glob / inflight**: These come from **Jest** (and related packages). Jest 29 still uses `glob@7`, which depends on deprecated `inflight`. You may see npm deprecation warnings; they are harmless. Upgrading to `glob@10` would require Jest to use the new API (see [jestjs/jest#15173](https://github.com/jestjs/jest/issues/15173), [#15910](https://github.com/jestjs/jest/issues/15910)). Until Jest updates, the warnings can be ignored or suppressed.
+```
+src/main.ts          composition root: window + watcher + session tracker
+src/shell/
+  types.ts           NativeShell boundary (interface)
+  appkit.ts          real shell — bun:ffi → native/libpeonshell.dylib
+  fake.ts            in-memory shell for headless tests
+src/app/             ported logic (session tracker, jsonl watcher, anim, …)
+native/peonshell.m   thin AppKit/WebKit C shim (NSPanel + WKWebView +
+                     peon-asset:// scheme handler); built to libpeonshell.dylib
+renderer/            unchanged Three.js renderer, loaded over peon-asset://
+```
+
+The only file that touches `bun:ffi` is `src/shell/appkit.ts`. Everything above the
+`NativeShell` boundary is tested against `FakeShell`, so the suite runs headlessly.
 
 ## Development
 
 ```bash
-npm run dev    # starts with DevTools detached
-npm test       # runs Jest test suite (63 tests)
+bun run dev    # builds the shim, runs with native diagnostics (--dev)
+bun test       # 138 tests, headless (no window opened)
+bun run build:native   # rebuild native/libpeonshell.dylib after editing the shim
 ```
 
-Simulate an event by writing to the peon-ping state file:
+The pet reacts to Claude Code automatically: just use Claude Code and watch the orc
+wake / type / celebrate. With `bun run dev` the terminal echoes each reaction, e.g.
+`→ orc: typing (UserPromptSubmit)`.
 
-```bash
-python3 -c "
-import json, time, os, uuid
-f = os.path.expanduser('~/.claude/hooks/peon-ping/.state.json')
-try: state = json.load(open(f))
-except: state = {}
-state['last_active'] = {
-  'session_id': str(uuid.uuid4()),
-  'timestamp': time.time(),
-  'event': 'PermissionRequest'
-}
-json.dump(state, open(f, 'w'))
-"
-```
-
-Valid events: `SessionStart`, `SessionEnd`, `Stop`, `UserPromptSubmit`, `PermissionRequest`, `PostToolUseFailure`, `PreCompact`
+Valid events: `SessionStart`, `Stop`, `UserPromptSubmit`, `PermissionRequest`, `PostToolUseFailure`, `PreCompact`
 
 ## Sprite atlas
 

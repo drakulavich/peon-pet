@@ -2,28 +2,22 @@
   "name": "peon-pet",
   "productName": "Peon Pet",
   "version": "1.0.0-alpha.1",
-  "description": "Desktop pet for Peon-Ping — an orc that reacts to peon-ping events",
-  "main": "main.js",
+  "description": "Desktop pet for Peon-Ping — an orc that reacts to peon-ping events. Native Bun + AppKit (no Electron).",
+  "module": "src/main.ts",
   "scripts": {
-    "start": "electron .",
-    "dev": "electron . --dev",
+    "start": "bun run build:native && bun run src/main.ts",
+    "dev": "bun run build:native && bun run src/main.ts --dev",
     "test": "bun test",
     "test:watch": "bun test --watch",
     "build:native": "clang -framework Cocoa -framework WebKit -dynamiclib -fobjc-arc -o native/libpeonshell.dylib native/peonshell.m",
     "spike": "bun run src/spike.ts",
-    "demo": "bun run src/demo-orc.ts",
-    "start:bun": "bun run build:native && bun run src/main.ts",
-    "dev:bun": "bun run build:native && bun run src/main.ts --dev"
+    "demo": "bun run src/demo-orc.ts"
   },
   "dependencies": {
     "three": "^0.183.0"
   },
   "devDependencies": {
     "@types/bun": "^1.3.14",
-    "canvas": "^3.2.1",
-    "electron": "^40.4.1"
-  },
-  "overrides": {
-    "boolean": "file:./patches/boolean-shim"
+    "canvas": "^3.2.1"
   }
 }
