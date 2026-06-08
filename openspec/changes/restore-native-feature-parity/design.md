@@ -4,6 +4,9 @@
 > what exists, don't over-abstract; Zakharchenko: keep the new logic pure and
 > tested at a seam; Rossi: ship the parity gaps incrementally). Joel-style: the
 > open questions below are real and want answers before/while implementing.
+> **Sobolev's correct-user-stories lens** (see `project.md` → Spec authoring) drives
+> the spec deltas: each requirement names a specific role, is tagged MoSCoW, and
+> enumerates failure/edge outcomes — not just the happy path.
 
 ## Author
 
