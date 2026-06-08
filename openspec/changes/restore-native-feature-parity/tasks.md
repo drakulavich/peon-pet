@@ -25,17 +25,15 @@ Four independent gaps, highest user value first. Each leaves the app working.
 
 ## 3. Native sub-agent keepalive (relay dropped)
 
-- [ ] 3.1 `src/app/jsonl-watcher.ts`: extend `getActiveSessionIds()` to also report a
-      session that has an active sub-agent — foreground
-      (`activeSubagentToolIds.size > 0`) or background (parent `sessionId` of a live
-      `subagents/` file). No `main.ts` change (heartbeat already refreshes these ids).
-- [ ] 3.2 Unit-test: a session with an active foreground sub-agent (and one with a
-      live background sub-agent file) is reported active despite no pending tools,
-      and is **no longer** reported once the sub-agent stops (`turn_duration` /
-      stale teardown).
-- [ ] 3.3 Confirm nothing reintroduces `remoteUrl` / `readRemoteState` /
-      `syncRemoteSessionsToTracker`; manual: run a long sub-agent task → orc stays
-      awake (no relay running).
+- [x] 3.1 `src/app/jsonl-watcher.ts`: extended `getActiveSessionIds()` to also report a
+      session with an active sub-agent — foreground (`activeSubagentToolIds.size > 0`)
+      or background (parent `sessionId` of a live `subagents/` file). No `main.ts`
+      change (heartbeat already refreshes these ids).
+- [x] 3.2 Unit tests added (`tests/jsonl-watcher.test.ts`): foreground + background
+      keepalive despite no pending tools; stops on `turn_duration` and on stale
+      teardown; only valid UUID ids reported. 5 tests, green.
+- [x] 3.3 No `remoteUrl` / `readRemoteState` / `syncRemoteSessionsToTracker` in the
+      tree. (Manual "long sub-agent → orc stays awake" remains an on-device check.)
 
 ## 4. Primary-display correctness
 
