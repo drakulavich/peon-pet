@@ -64,26 +64,26 @@ a time — launching a second just exits.
 
 ## Characters
 
-Bundled skins: **orc** (default), **capybara**, **hello-kitty**. Select one in config,
-or with a CLI flag:
+The bundled skin is **orc**. You can add your own and select it in config or with a
+CLI flag:
 
 ```bash
-bun run build:native           # once
-bun src/main.ts --character capybara   # or --corner top-right
+bun run build:native                  # once
+bun src/main.ts --character my-skin   # or --corner top-right
 ```
 
 Config lives at `~/Library/Application Support/peon-pet/peon-pet-config.json` (the
 legacy Electron `Peon Pet` dir is reused automatically if you're upgrading):
 
 ```json
-{ "character": "capybara", "corner": "bottom-right" }
+{ "character": "my-skin", "corner": "bottom-right" }
 ```
 
 **Custom skins:** drop your own PNGs in
 `~/Library/Application Support/peon-pet/characters/<name>/` —
-`sprite-atlas.png`, `borders.png`, `bg.png`, `dock-icon.png`. User files override the
-bundled ones per-asset (anything missing falls back to the bundled skin, then orc).
-Precedence for the active character is `--character` > config > `orc`.
+`sprite-atlas.png`, `borders.png`, `bg.png`, `dock-icon.png`. Any asset you don't
+provide falls back to the bundled orc. Precedence for the active character is
+`--character` > config > `orc`.
 
 ## Animations
 

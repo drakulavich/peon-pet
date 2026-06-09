@@ -1,5 +1,6 @@
 // Per-character asset maps: canonical asset name → bundled filename.
-// Ported verbatim from main.js BUNDLED_CHARS.
+// Only orc is bundled; other skins come from the user's character directory
+// (see asset-resolver) and fall back to orc per-asset when absent.
 
 export type CharacterAssetMap = Record<string, string>;
 
@@ -9,16 +10,6 @@ export const BUNDLED_CHARS: Record<string, CharacterAssetMap> = {
     "borders.png": "orc-borders.png",
     "bg.png": "bg-pixel.png",
     "dock-icon.png": "orc-dock-icon.png",
-  },
-  capybara: {
-    "sprite-atlas.png": "capybara-sprite-atlas.png",
-    "borders.png": "capybara-borders.png",
-    "dock-icon.png": "capybara-dock-icon.png",
-  },
-  "hello-kitty": {
-    "sprite-atlas.png": "hello-kitty-sprite-atlas.png",
-    "borders.png": "hello-kitty-borders.png",
-    "dock-icon.png": "hello-kitty-dock-icon.png",
   },
 };
 

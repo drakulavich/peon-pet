@@ -35,8 +35,8 @@ describe("configDir", () => {
 describe("loadConfig", () => {
   test("parses a valid config from the resolved dir", () => {
     const path = join(NATIVE, "peon-pet-config.json");
-    const cfg = loadConfig(env({ files: { [path]: JSON.stringify({ character: "capybara", corner: "top-right" }) } }));
-    expect(cfg).toEqual({ character: "capybara", corner: "top-right" });
+    const cfg = loadConfig(env({ files: { [path]: JSON.stringify({ character: "dragon", corner: "top-right" }) } }));
+    expect(cfg).toEqual({ character: "dragon", corner: "top-right" });
   });
 
   test("reads from the legacy dir when present", () => {

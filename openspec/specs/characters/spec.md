@@ -40,13 +40,13 @@ _Priority: Should. Role: a user who wants a one-off skin at launch._
 
 #### Scenario: CLI flag overrides config (happy path)
 
-- **WHEN** the app starts with `--character capybara` and config says `hello-kitty`
-- **THEN** the capybara character is used
+- **WHEN** the app starts with `--character moon` and config says `star`
+- **THEN** the `moon` character is used
 
 #### Scenario: Config used when no flag
 
-- **WHEN** no `--character` flag is given and config says `capybara`
-- **THEN** the capybara character is used
+- **WHEN** no `--character` flag is given and config says `moon`
+- **THEN** the `moon` character is used
 
 #### Scenario: Unknown character name degrades to the orc fallback (failure)
 

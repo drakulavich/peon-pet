@@ -3,7 +3,7 @@ import { argValue, safeCharacter, safeCorner } from "../src/app/cli.ts";
 
 describe("argValue", () => {
   test("returns the value after the flag", () => {
-    expect(argValue(["bun", "main.ts", "--character", "capybara"], "--character")).toBe("capybara");
+    expect(argValue(["bun", "main.ts", "--character", "dragon"], "--character")).toBe("dragon");
   });
 
   test("missing flag → undefined", () => {
@@ -20,7 +20,7 @@ describe("argValue", () => {
 });
 
 describe("safeCharacter", () => {
-  test.each(["orc", "capybara", "hello-kitty", "Orc2"])("accepts safe slug %s", (name) => {
+  test.each(["orc", "dragon", "my-skin", "Orc2"])("accepts safe slug %s", (name) => {
     expect(safeCharacter(name)).toBe(name);
   });
 

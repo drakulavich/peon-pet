@@ -25,10 +25,10 @@ describe("bundledFilename", () => {
     expect(bundledFilename("orc", "sprite-atlas.png")).toBe("orc-sprite-atlas.png");
   });
 
-  test("capybara bg.png falls back to orc's bg-pixel.png", () => {
-    // capybara has no bg.png entry → orc fallback
-    expect(BUNDLED_CHARS.capybara["bg.png"]).toBeUndefined();
-    expect(bundledFilename("capybara", "bg.png")).toBe("bg-pixel.png");
+  test("a non-orc character's asset falls back to orc's bundled file", () => {
+    // orc is the only bundled skin → any other character maps to orc
+    expect(BUNDLED_CHARS["dragon"]).toBeUndefined();
+    expect(bundledFilename("dragon", "bg.png")).toBe("bg-pixel.png");
   });
 
   test("unknown character falls back to orc map", () => {
@@ -81,8 +81,8 @@ describe("resolveAsset — character assets", () => {
     expect(r?.filePath).toBe(join(ASSETS, "orc-sprite-atlas.png"));
   });
 
-  test("capybara bg.png resolves via orc fallback file", () => {
-    const c = ctx({ character: "capybara", present: [join(ASSETS, "bg-pixel.png")] });
+  test("a non-orc character's bg.png resolves via the orc fallback file", () => {
+    const c = ctx({ character: "dragon", present: [join(ASSETS, "bg-pixel.png")] });
     const r = resolveAsset("peon-asset://bg.png", c);
     expect(r?.filePath).toBe(join(ASSETS, "bg-pixel.png"));
   });
