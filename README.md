@@ -41,10 +41,37 @@ To remove:
 
 ## Controls
 
-Quit with `Ctrl-C` (foreground) or `./uninstall.sh` (LaunchAgent).
+Right-click the **Peon-Ping dock icon** for a menu:
 
-> The right-click dock menu (Hide / Show / Quit) and drag-to-move are being
-> reimplemented on the native shell — see the OpenSpec change under `openspec/`.
+- **Hide Pet** / **Show Pet** — toggle visibility (orc + any sub-agent mini-pets) without quitting
+- **Quit** — exit completely
+
+You can also **drag** the orc with the mouse to move it, and quit with `Ctrl-C` in the
+foreground (or `./uninstall.sh` to remove the LaunchAgent). Only one instance runs at
+a time — launching a second just exits.
+
+## Characters
+
+Bundled skins: **orc** (default), **capybara**, **hello-kitty**. Select one in config,
+or with a CLI flag:
+
+```bash
+bun run build:native           # once
+bun src/main.ts --character capybara   # or --corner top-right
+```
+
+Config lives at `~/Library/Application Support/peon-pet/peon-pet-config.json` (the
+legacy Electron `Peon Pet` dir is reused automatically if you're upgrading):
+
+```json
+{ "character": "capybara", "corner": "bottom-right" }
+```
+
+**Custom skins:** drop your own PNGs in
+`~/Library/Application Support/peon-pet/characters/<name>/` —
+`sprite-atlas.png`, `borders.png`, `bg.png`, `dock-icon.png`. User files override the
+bundled ones per-asset (anything missing falls back to the bundled skin, then orc).
+Precedence for the active character is `--character` > config > `orc`.
 
 ## Animations
 
@@ -65,9 +92,17 @@ Up to 10 glowing orbs appear above the orc — one per tracked Claude Code sessi
 - **Bright pulsing green** — active (event within last 30 s)
 - **Dim green** — idle (last event 30 s–2 min ago)
 
-Sessions are removed when Claude Code fires `SessionEnd`, or automatically after 10 min of inactivity.
+Sessions are dropped automatically after 10 min of inactivity (the JSONL transcript
+model has no explicit "session end" — they decay).
 
 Hover over a dot to see the project folder and status. Hover anywhere on the widget to see all active project names.
+
+## Sub-agents
+
+When a session spawns sub-agents, a mini-orc (up to 5) pops up stacked above the main
+pet for each active sub-agent and disappears when it finishes. The parent session is
+kept "awake" while its sub-agents run, so the orc doesn't fall asleep during long
+sub-agent tasks.
 
 ## Architecture
 
@@ -90,9 +125,12 @@ The only file that touches `bun:ffi` is `src/shell/appkit.ts`. Everything above 
 
 ```bash
 bun run dev    # builds the shim, runs with native diagnostics (--dev)
-bun test       # 138 tests, headless (no window opened)
+bun test       # 182 tests, headless (no window opened)
 bun run build:native   # rebuild native/libpeonshell.dylib after editing the shim
 ```
+
+Specs of record live under `openspec/specs/` (capabilities), with shipped changes
+archived in `openspec/changes/archive/`.
 
 The pet reacts to Claude Code automatically: just use Claude Code and watch the orc
 wake / type / celebrate. With `bun run dev` the terminal echoes each reaction, e.g.
