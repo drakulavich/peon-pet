@@ -41,6 +41,8 @@
   "files": [
     "bin/",
     "src/",
+    "!src/spike.ts",
+    "!src/demo-orc.ts",
     "renderer/",
     "native/peonshell.m",
     "native/libpeonshell.dylib",
