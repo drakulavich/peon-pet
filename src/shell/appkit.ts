@@ -27,6 +27,7 @@ function loadLib(dylibPath: string) {
     peon_init: { args: [], returns: FFIType.void },
     peon_set_verbose: { args: [FFIType.bool], returns: FFIType.void },
     peon_set_project_root: { args: [FFIType.cstring], returns: FFIType.void },
+    peon_set_three_dir: { args: [FFIType.cstring], returns: FFIType.void },
     peon_register_asset: { args: [FFIType.cstring, FFIType.cstring], returns: FFIType.void },
     peon_make_webview_panel: {
       args: [FFIType.f64, FFIType.f64, FFIType.f64, FFIType.f64],
@@ -161,6 +162,8 @@ export interface AppKitShellOptions {
   /** Project root + resolved character-asset paths to serve over peon-asset://. */
   projectRoot: string;
   assets: { name: string; filePath: string }[];
+  /** Vendored three.js build dir (published package); null/omit for a git clone. */
+  threeBuildDir?: string | null;
   /** Native diagnostics to stderr. */
   verbose?: boolean;
   /** Override the dylib path (defaults to ../native/libpeonshell.dylib). */
@@ -188,6 +191,7 @@ export class AppKitShell implements NativeShell {
     // under the cooperative pump.
     this.#sym.peon_pump_begin();
     this.#sym.peon_set_project_root(cstr(opts.projectRoot));
+    if (opts.threeBuildDir) this.#sym.peon_set_three_dir(cstr(opts.threeBuildDir));
     for (const a of opts.assets) this.#sym.peon_register_asset(cstr(a.name), cstr(a.filePath));
 
     // Renderer → native (drag-start/stop): route to the owning window.

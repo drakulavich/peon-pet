@@ -27,9 +27,19 @@ export interface AssetContext {
   assetsDir: string;
   /** Absolute user-installed character dir, or null if none. */
   userCharDir: string | null;
+  /**
+   * Absolute dir holding three.js's `build/` files (three.module.js + three.core.js).
+   * When set, `node_modules/three/build/*` requests are served from here instead of
+   * `<projectRoot>/node_modules/three/build/*`. Lets the published package vendor
+   * three so it works even when npm hoists the real `three` elsewhere. Null = use
+   * the project root (git-clone layout).
+   */
+  threeBuildDir?: string | null;
   /** Injected existence check (real FS in prod, fake in tests). */
   fileExists: (path: string) => boolean;
 }
+
+const THREE_BUILD_PREFIX = "node_modules/three/build/";
 
 export interface ResolvedAsset {
   filePath: string;
@@ -91,6 +101,18 @@ export function resolveAsset(requestUrl: string, ctx: AssetContext): ResolvedAss
 
   // ── Renderer file (path form): peon-asset://app/<path under project root> ──
   const rel = normalize(pathname).replace(/^([/\\])+/, "");
+
+  // three.js alias: serve vendored three from threeBuildDir if configured + present.
+  if (ctx.threeBuildDir && rel.startsWith(THREE_BUILD_PREFIX)) {
+    const file = rel.slice(THREE_BUILD_PREFIX.length);
+    const aliased = join(ctx.threeBuildDir, file);
+    const prefix = ctx.threeBuildDir.endsWith(sep) ? ctx.threeBuildDir : ctx.threeBuildDir + sep;
+    if (aliased.startsWith(prefix) && ctx.fileExists(aliased)) {
+      return { filePath: aliased, contentType: contentTypeFor(aliased) };
+    }
+    // else fall through to the project-root path (git-clone node_modules layout)
+  }
+
   const filePath = join(ctx.projectRoot, rel);
   // Guard against path traversal escaping the project root.
   const rootPrefix = ctx.projectRoot.endsWith(sep) ? ctx.projectRoot : ctx.projectRoot + sep;

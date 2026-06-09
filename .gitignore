@@ -8,6 +8,9 @@ dist/
 # Compiled native shim (built via `bun run build:native`)
 native/*.dylib
 
+# Vendored three.js (generated at prepack for the npm tarball)
+renderer/vendor/
+
 # Raw generation artifacts (intermediate files from sprite/image generation)
 2026-*-*-*.png
 

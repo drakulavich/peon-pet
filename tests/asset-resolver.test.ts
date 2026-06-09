@@ -13,6 +13,7 @@ function ctx(over: Partial<AssetContext> & { present?: string[] } = {}): AssetCo
     projectRoot: over.projectRoot ?? ROOT,
     assetsDir: over.assetsDir ?? ASSETS,
     userCharDir: over.userCharDir ?? null,
+    threeBuildDir: over.threeBuildDir ?? null,
     fileExists: over.fileExists ?? ((p: string) => present.has(p)),
   };
 }
@@ -137,6 +138,25 @@ describe("resolveAsset — renderer files", () => {
     const r = resolveAsset("peon-asset://app/node_modules/three/build/three.module.js", c);
     expect(r?.filePath).toBe(p);
     expect(r?.contentType).toBe("text/javascript; charset=utf-8");
+  });
+
+  test("three is served from the vendored threeBuildDir when set", () => {
+    const vendored = "/proj/renderer/vendor/three/build";
+    const v = join(vendored, "three.module.js");
+    const c = ctx({ threeBuildDir: vendored, present: [v] });
+    expect(resolveAsset("peon-asset://app/node_modules/three/build/three.module.js", c)?.filePath).toBe(v);
+    // three.core.js (imported by three.module.js) resolves from the same dir
+    const core = join(vendored, "three.core.js");
+    const c2 = ctx({ threeBuildDir: vendored, present: [core] });
+    expect(resolveAsset("peon-asset://app/node_modules/three/build/three.core.js", c2)?.filePath).toBe(core);
+  });
+
+  test("three falls back to node_modules when threeBuildDir lacks the file", () => {
+    const vendored = "/proj/renderer/vendor/three/build";
+    const nm = join(ROOT, "node_modules/three/build/three.module.js");
+    // vendored dir set, but only the node_modules copy exists on disk
+    const c = ctx({ threeBuildDir: vendored, present: [nm] });
+    expect(resolveAsset("peon-asset://app/node_modules/three/build/three.module.js", c)?.filePath).toBe(nm);
   });
 
   test("shader file resolves with text/plain", () => {

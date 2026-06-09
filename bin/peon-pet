@@ -1,0 +1,29 @@
+#!/usr/bin/env bun
+// peon-pet launcher. Runs the Bun + AppKit entrypoint. Requires Bun on macOS
+// (Apple Silicon); the prebuilt arm64 native shim ships in the package.
+
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+
+const pkgRoot = join(import.meta.dir, "..");
+const dylib = join(pkgRoot, "native", "libpeonshell.dylib");
+
+// The package ships a prebuilt arm64 dylib. If it's missing (deleted, or a forced
+// non-arm64 install), try to compile it — needs Apple's clang (Xcode CLT).
+if (!existsSync(dylib)) {
+  console.error("peon-pet: native shim missing — building (needs Xcode Command Line Tools)…");
+  const r = Bun.spawnSync(["bun", "run", "build:native"], {
+    cwd: pkgRoot,
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+  if (r.exitCode !== 0) {
+    console.error(
+      "peon-pet: could not build the native shim. Requires Apple Silicon macOS + Xcode Command Line Tools (`xcode-select --install`).",
+    );
+    process.exit(1);
+  }
+}
+
+// main.ts executes on import and reads process.argv (--character/--corner/--dev).
+await import(join(pkgRoot, "src", "main.ts"));

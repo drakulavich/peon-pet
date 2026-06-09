@@ -1,23 +1,66 @@
 {
-  "name": "peon-pet",
-  "productName": "Peon Pet",
-  "version": "1.0.0-alpha.1",
-  "description": "Desktop pet for Peon-Ping — an orc that reacts to peon-ping events. Native Bun + AppKit (no Electron).",
+  "name": "@drakulavich/peon-pet",
+  "version": "0.1.0",
+  "description": "A macOS desktop pet for Peon-Ping — an orc that reacts to your Claude Code events. Native Bun + AppKit (no Electron).",
+  "type": "module",
   "module": "src/main.ts",
+  "bin": {
+    "peon-pet": "bin/peon-pet"
+  },
+  "license": "MIT",
+  "author": "Anton Yakutovich (drakulavich)",
+  "homepage": "https://github.com/drakulavich/peon-pet#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/drakulavich/peon-pet.git"
+  },
+  "bugs": {
+    "url": "https://github.com/drakulavich/peon-pet/issues"
+  },
+  "keywords": [
+    "claude-code",
+    "desktop-pet",
+    "peon-ping",
+    "macos",
+    "bun",
+    "appkit",
+    "orc"
+  ],
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "engines": {
+    "bun": ">=1.3.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "renderer/",
+    "native/peonshell.m",
+    "native/libpeonshell.dylib",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "start": "bun run build:native && bun run src/main.ts",
     "dev": "bun run build:native && bun run src/main.ts --dev",
     "test": "bun test",
     "test:watch": "bun test --watch",
     "build:native": "clang -framework Cocoa -framework WebKit -dynamiclib -fobjc-arc -o native/libpeonshell.dylib native/peonshell.m",
+    "vendor:three": "bun run scripts/vendor-three.ts",
+    "prepack": "bun run build:native && bun run vendor:three",
     "spike": "bun run src/spike.ts",
     "demo": "bun run src/demo-orc.ts"
   },
-  "dependencies": {
-    "three": "^0.183.0"
-  },
   "devDependencies": {
     "@types/bun": "^1.3.14",
-    "canvas": "^3.2.1"
+    "canvas": "^3.2.1",
+    "three": "^0.183.0"
   }
 }

@@ -13,10 +13,22 @@ Sits in the bottom-left corner of your screen and floats over all windows. Click
 - Xcode Command Line Tools (`clang`, to build the native shim) — `xcode-select --install`
 - [peon-ping](https://peonping.com) installed and running
 
-## Quick start
+## Install (npm)
 
 ```bash
-git clone <repo> peon-pet
+bunx @drakulavich/peon-pet               # run it once
+# or install globally:
+bun add -g @drakulavich/peon-pet && peon-pet
+```
+
+Requires **Apple Silicon macOS**, **[Bun](https://bun.sh)**, and **peon-ping** running.
+A prebuilt native shim ships in the package — no Xcode needed. Pass `--character <name>`
+or `--corner <corner>` as below.
+
+## Run from source (development)
+
+```bash
+git clone https://github.com/drakulavich/peon-pet
 cd peon-pet
 bun install
 bun run start      # builds the native shim, then launches the pet

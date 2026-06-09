@@ -47,6 +47,11 @@ const character =
 const corner = safeCorner(argValue(process.argv, "--corner")) || safeCorner(cfg.corner);
 const userCharDir = join(configDir(), "characters", character);
 
+// Published packages vendor three.js here (npm hoists the real `three` elsewhere);
+// a git clone has no vendor dir, so three resolves from node_modules as usual.
+const VENDORED_THREE = join(PROJECT_ROOT, "renderer", "vendor", "three", "build");
+const threeBuildDir = existsSync(VENDORED_THREE) ? VENDORED_THREE : null;
+
 // Resolve the character assets in TS, then hand absolute paths to the shell.
 // User-installed files under userCharDir take precedence over bundled ones.
 const assetCtx = {
@@ -54,6 +59,7 @@ const assetCtx = {
   projectRoot: PROJECT_ROOT,
   assetsDir: ASSETS_DIR,
   userCharDir,
+  threeBuildDir,
   fileExists: existsSync,
 };
 const assets = ASSET_NAMES.flatMap((name) => {
@@ -62,7 +68,7 @@ const assets = ASSET_NAMES.flatMap((name) => {
 });
 
 const RENDERER_URL = "peon-asset://app/renderer/index.html";
-const shell = new AppKitShell({ projectRoot: PROJECT_ROOT, assets, verbose: DEV });
+const shell = new AppKitShell({ projectRoot: PROJECT_ROOT, assets, threeBuildDir, verbose: DEV });
 
 const { width, height } = shell.getPrimaryWorkArea();
 const { x, y } = cornerPosition(corner, width, height);

@@ -27,6 +27,9 @@ static const void *kPanelKey = &kPanelKey; // associated-object key: webview →
 // precedence lives in TS; here we just look up what TS registered.
 static NSMutableDictionary<NSString *, NSString *> *gAssetMap = nil;
 static NSString *gProjectRoot = nil;
+// Vendored three.js build dir; when set, node_modules/three/build/* requests are
+// served from here (a published package vendors three outside node_modules).
+static NSString *gThreeDir = nil;
 
 static NSString *peon_mime_for_path(NSString *path) {
   NSString *ext = path.pathExtension.lowercaseString;
@@ -54,6 +57,14 @@ static NSString *peon_resolve_url(NSURL *url) {
   // Path-form renderer file: peon-asset://app/<path under project root>
   if (!gProjectRoot) return nil;
   NSString *rel = [path hasPrefix:@"/"] ? [path substringFromIndex:1] : path;
+  // three.js alias: serve vendored three from gThreeDir when configured.
+  NSString *kThree = @"node_modules/three/build/";
+  if (gThreeDir && [rel hasPrefix:kThree]) {
+    NSString *file = [rel substringFromIndex:kThree.length];
+    NSString *aliased = [[gThreeDir stringByAppendingPathComponent:file] stringByStandardizingPath];
+    if ([aliased hasPrefix:gThreeDir.stringByStandardizingPath]) return aliased;
+    // else fall through to the project-root path (git-clone node_modules layout)
+  }
   NSString *full = [gProjectRoot stringByAppendingPathComponent:rel];
   // Clamp inside the project root (defense in depth; NSURL already normalizes ..).
   NSString *std = full.stringByStandardizingPath;
@@ -191,6 +202,10 @@ void peon_init(void) {
 
 void peon_set_project_root(const char *root) {
   gProjectRoot = [[NSString stringWithUTF8String:root] stringByStandardizingPath];
+}
+
+void peon_set_three_dir(const char *dir) {
+  gThreeDir = [[NSString stringWithUTF8String:dir] stringByStandardizingPath];
 }
 
 void peon_register_asset(const char *name, const char *absPath) {
