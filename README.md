@@ -4,7 +4,7 @@ A macOS desktop pet for [Peon-Ping](https://peonping.com) — an orc that reacts
 
 <video src="https://github.com/user-attachments/assets/7fd9a2cb-d227-49ad-8ccc-7953ec392a2d" autoplay loop muted playsinline width="400"></video>
 
-Sits in the bottom-left corner of your screen, floats over all windows, and ignores mouse clicks (hover for tooltips).
+Sits in the bottom-left corner of your screen and floats over all windows. Clicks pass through to whatever's underneath — except when you hover the orc itself, where it captures the mouse so you can read tooltips and drag it around.
 
 ## Requirements
 

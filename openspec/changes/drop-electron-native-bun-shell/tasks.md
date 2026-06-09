@@ -142,14 +142,18 @@ working.
 
 Run on the target macOS version; all must pass before merge:
 
-- [ ] 8.1 Pet appears bottom-left, correct size/margin
-- [ ] 8.2 Floats over a normal window **and** over a full-screen app; no focus theft
-- [ ] 8.3 Click over the pet passes through to the window beneath
-- [ ] 8.4 Hover shows tooltips; session-dot hover shows project names
-- [ ] 8.5 Drag relocates the pet; click-through resumes after
-- [ ] 8.6 Animations fire on real Claude Code events (waking/typing/celebrate/…)
-- [ ] 8.7 Sub-agent mini-pets appear (≤5), stack, and disappear on stop/TTL
-- [ ] 8.8 Dock menu Hide/Show/Quit work; second launch is blocked
+Verified on-device (2026-06-09):
+
+- [x] 8.1 Pet appears bottom-left, correct size/margin
+- [x] 8.2 Floats over a normal window **and** over a full-screen app; no focus theft
+- [x] 8.3 Click-through — **accepted as Electron-parity (choice B):** clicks pass
+      through when not hovering; while hovering the orc the window captures (so
+      hover + drag work) and the click is consumed. Docs/spec corrected to match.
+- [x] 8.4 Hover shows tooltips; session-dot hover shows project names
+- [x] 8.5 Drag relocates the pet; click-through resumes after
+- [x] 8.6 Animations fire on real Claude Code events (waking/typing/celebrate/…)
+- [x] 8.7 Sub-agent mini-pets appear (≤5), stack, and disappear on stop/TTL
+- [x] 8.8 Dock menu Hide/Show/Quit work; second launch is blocked
 - [x] 8.9 Idle memory measured vs. the old Electron build → `benchmarks.md`.
       Electron 713.7 MB / 6 procs / 276 MB disk → Bun 439.7 MB / 4 procs / 76 KB shim
       (−38% RSS, −99.97% per-app disk). Caveat: Bun is main-window-only so far.

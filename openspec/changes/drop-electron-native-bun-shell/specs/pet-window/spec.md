@@ -22,15 +22,24 @@ including full-screen Spaces.
 
 ### Requirement: Click-through with hover capture
 
-The pet window SHALL ignore mouse events by default so clicks pass through to
-windows beneath it, and SHALL capture mouse movement only while the cursor is
-within the window bounds, so the renderer receives hover events for tooltips.
+The pet window SHALL ignore mouse events (clicks pass through to windows beneath)
+while the cursor is **outside** the window, and SHALL capture mouse events while
+the cursor is **inside** the window so the renderer receives hover (tooltips) and
+the pet can be dragged. This matches the Electron behavior: hover + drag require
+capture, so a click on the pet itself is consumed, not passed through (a deliberate
+trade-off — see the design's click-through note).
 
-#### Scenario: Click passes through
+#### Scenario: Click outside the pet passes through
 
-- **WHEN** the cursor is over the pet and the user clicks
-- **THEN** the click is delivered to whatever window is beneath the pet
-- **AND** the pet itself does not receive or consume the click
+- **WHEN** the cursor is outside the pet window and the user clicks
+- **THEN** the click is delivered to whatever window is beneath (the pet is
+  click-through there)
+
+#### Scenario: Click on the pet is captured (enables hover + drag)
+
+- **WHEN** the cursor is over the pet (so the window is capturing mouse events)
+- **THEN** the click is received by the pet — this is what makes hover tooltips and
+  drag-to-move possible, and is the documented trade-off vs. pass-through-everywhere
 
 #### Scenario: Hover enables tooltips
 
