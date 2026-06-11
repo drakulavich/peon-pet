@@ -145,11 +145,17 @@ the plan, not automatable from the workflow.)
 
 ## Decisions
 
-1. **Committed dylib stays tracked.** `native/libpeonshell.dylib` remains in git and
-   in `package.json#files`. `prepack` rebuilds it as universal2 at publish time, so
-   the committed copy is not the published authority — but keeping it tracked means a
-   raw `bunx` from a git install still works without clang present. No gitignore
-   change.
+1. **Dylib stays gitignored (untracked).** `native/libpeonshell.dylib` is NOT tracked
+   in git — `.gitignore` keeps its existing `native/*.dylib` rule (the repo author's
+   established convention). It remains listed in `package.json#files`, and `prepack`
+   rebuilds it as universal2 at publish time, so the npm tarball always contains a
+   freshly compiled binary. Rationale for not tracking it: every `bun run build:native`
+   regenerates a ~2×-size binary, which would create constant `git status` churn for no
+   pipeline benefit (CI and `prepack` both rebuild it from source). The one tradeoff —
+   a raw `bunx` from a *git* URL on a machine without Xcode CLT — is covered by the
+   existing compile-on-missing fallback in `bin/peon-pet`. (This revises an earlier
+   draft of this decision that proposed keeping the binary tracked; the gitignored
+   approach matches the repo's pre-existing convention and is the implemented choice.)
 2. **Release flow = GitHub release as manual gate.** Draft → publish triggers the npm
    workflow. First release is `v0.1.0` (matches current `package.json#version`).
 3. **Publish runs on `macos-14`** (see deviation above).
