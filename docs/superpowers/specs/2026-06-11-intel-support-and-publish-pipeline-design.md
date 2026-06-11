@@ -137,11 +137,26 @@ Provenance / OIDC attestation works on macOS runners. The split-job alternative
 (build-on-macos → upload artifact → publish-on-ubuntu) adds moving parts for no
 benefit here and is explicitly not chosen.
 
-### Secret required
+### Authentication: Trusted Publishing (OIDC), token-less
 
-`NPM_TOKEN` — an npm automation token with publish rights to
-`@drakulavich/peon-pet`, stored as a repo secret. (Out-of-band setup step; noted in
-the plan, not automatable from the workflow.)
+The publish authenticates via npm **Trusted Publishing** — no `NPM_TOKEN` secret.
+The workflow's `id-token: write` OIDC token is exchanged directly with the registry,
+and the same token signs the provenance attestation. Requirements baked into the
+workflow:
+
+- `id-token: write` permission (already needed for provenance).
+- npm **≥ 11.5.1** — Node 22 bundles npm 10.x, so the workflow runs
+  `npm install -g npm@latest` before publishing (older npm silently falls back to
+  token auth and fails).
+- No `NODE_AUTH_TOKEN` / `secrets.NPM_TOKEN` in the publish step.
+
+**Out-of-band setup (npmjs.com, one-time):** on the package's
+Settings → Trusted Publishing, add a GitHub Actions publisher — repo
+`drakulavich/peon-pet`, workflow `npm-publish.yml`, no environment. For the very
+first publish (before the package exists on npm), Trusted Publishing can't be
+pre-registered against a non-existent package; either do the initial `0.1.0`
+publish from a local machine with a token, or create the package placeholder first,
+then configure the trusted publisher for all subsequent releases.
 
 ## Decisions
 

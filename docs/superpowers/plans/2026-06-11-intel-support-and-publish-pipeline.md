@@ -472,15 +472,19 @@ git commit -m "ci: release-gated npm publish with provenance on macOS runner"
 **Files:**
 - None (operational checklist)
 
-- [ ] **Step 1: Document the out-of-band `NPM_TOKEN` requirement**
+- [ ] **Step 1: Document the out-of-band Trusted Publishing setup**
 
-The publish workflow needs a repo secret that cannot be created from the workflow.
-Surface this to the user (do NOT attempt to set it programmatically):
+The publish uses npm **Trusted Publishing (OIDC)** — no repo secret. Surface this
+one-time npmjs.com configuration to the user (cannot be done from the workflow):
 
-> Add an npm **automation** access token with publish rights to
-> `@drakulavich/peon-pet` as repo secret `NPM_TOKEN`
-> (GitHub → repo Settings → Secrets and variables → Actions → New repository secret).
-> Without it, the publish step fails at `npm publish`.
+> On npmjs.com → the `@drakulavich/peon-pet` package → Settings → Trusted
+> Publishing → add a GitHub Actions publisher: repo `drakulavich/peon-pet`,
+> workflow `npm-publish.yml`, no environment.
+>
+> First-publish caveat: the package must exist on npm before a trusted publisher
+> can be attached to it. For the initial `0.1.0`, either publish once from a local
+> machine with a token, or create the package placeholder, then rely on Trusted
+> Publishing for every release after.
 
 - [ ] **Step 2: Full local verification pass**
 
