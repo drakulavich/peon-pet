@@ -21,8 +21,8 @@ bunx @drakulavich/peon-pet               # run it once
 bun add -g @drakulavich/peon-pet && peon-pet
 ```
 
-Requires **Apple Silicon macOS**, **[Bun](https://bun.sh)**, and **peon-ping** running.
-A prebuilt native shim ships in the package — no Xcode needed. Pass `--character <name>`
+Requires **macOS (Apple Silicon or Intel)**, **[Bun](https://bun.sh)**, and **peon-ping** running.
+A prebuilt universal (arm64 + x86_64) native shim ships in the package — no Xcode needed. Pass `--character <name>`
 or `--corner <corner>` as below.
 
 ## Run from source (development)

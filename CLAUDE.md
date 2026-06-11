@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 peon-pet is a macOS desktop pet (an orc) that reacts to Claude Code events with sprite
 animations. It is **Bun + AppKit + Three.js, no Electron**: a native `NSPanel` driven via
 `bun:ffi`, rendering a Three.js scene inside a system `WKWebView`. Target platform is
-**Apple Silicon macOS only** (`darwin`/`arm64`); Linux/Windows are explicit non-goals.
+**Apple Silicon and Intel macOS** (`darwin`/`arm64`+`x64`); Linux/Windows are explicit non-goals.
 
 ## Commands
 
