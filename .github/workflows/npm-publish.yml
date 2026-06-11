@@ -1,0 +1,110 @@
+name: "📦 npm Publish"
+
+# Fires once a GitHub release leaves draft (the manual gate). Stable releases
+# publish to npm's `latest` dist-tag; SemVer prereleases (vX.Y.Z-beta.N) publish
+# to `beta` so `bunx @drakulavich/peon-pet@latest` users do not get unstable builds.
+#
+# Runs on macOS (not ubuntu like kesha-voice-kit) because `npm publish` triggers
+# this package's `prepack`, which compiles native/libpeonshell.dylib via clang with
+# `-framework Cocoa -framework WebKit` — macOS-only. macos-14 (Apple Silicon) can
+# cross-compile the x86_64 slice from the SDK, producing the universal2 tarball.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to publish (must already exist and have a published GitHub release)"
+        required: true
+
+# id-token: write unlocks npm provenance attestation via GitHub's OIDC provider.
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: macos-14
+    steps:
+      # Resolve tag through env vars, never direct ${{ }} interpolation in run:,
+      # to avoid shell injection from a crafted tag while id-token: write is held.
+      - name: Resolve tag
+        id: tag
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "tag=$INPUT_TAG" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout at tag
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.13"
+
+      # npm provenance requires npm >= 9.5; Node 22 ships npm 10.x. registry-url
+      # configures the auth line that NODE_AUTH_TOKEN consumes during npm publish.
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # Refuse to publish if package.json#version does not match the release tag.
+      - name: Verify package.json version matches tag
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          expected="${TAG#v}"
+          actual=$(node -p "require('./package.json').version")
+          if [ "$expected" != "$actual" ]; then
+            echo "::error::Tag $TAG implies version $expected but package.json says $actual" >&2
+            exit 1
+          fi
+          echo "package.json version $actual matches tag $TAG — OK"
+
+      # Idempotent guard: skip publish (no-op) if this version is already on npm.
+      - name: Check npm registry for prior publish
+        id: registry
+        run: |
+          name=$(node -p "require('./package.json').name")
+          version=$(node -p "require('./package.json').version")
+          if npm view "$name@$version" version >/dev/null 2>&1; then
+            echo "already_published=true" >> "$GITHUB_OUTPUT"
+            echo "$name@$version already on npm — publish step will be skipped."
+          else
+            echo "already_published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Resolve npm dist-tag
+        id: dist_tag
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [[ "$version" == *-* ]]; then
+            echo "tag=beta" >> "$GITHUB_OUTPUT"
+            echo "$version is a prerelease — dist-tag beta."
+          else
+            echo "tag=latest" >> "$GITHUB_OUTPUT"
+            echo "$version is stable — dist-tag latest."
+          fi
+
+      # npm publish runs prepack (build:native + vendor:three), producing the
+      # universal2 dylib and vendored three.js inside the published tarball.
+      - name: Publish to npm with provenance
+        if: steps.registry.outputs.already_published == 'false'
+        run: npm publish --provenance --access public --tag "$NPM_DIST_TAG"
+        env:
+          NPM_DIST_TAG: ${{ steps.dist_tag.outputs.tag }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
