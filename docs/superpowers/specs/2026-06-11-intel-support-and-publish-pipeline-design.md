@@ -106,8 +106,13 @@ a physical Intel Mac and is out of scope. This is an accepted gap.
 
 Reuses kesha-voice-kit's skeleton and security posture:
 
-- Triggers: `release: { types: [published] }` + `workflow_dispatch` with a `tag`
-  input. Publishing a GitHub release (draft → published) is the manual gate.
+- Triggers: `push: { tags: ["v*"] }` + `workflow_dispatch` with a `tag` input.
+  Pushing a `v*` tag is the manual gate. **Why tag-push, not `release`:** GitHub
+  reads `release`/`workflow_dispatch` workflow files from the **default branch**
+  only, so a release-gated publish cannot run from `forked-master`. A `push` event
+  runs the workflow from the pushed tag's own commit, so tagging a commit on any
+  branch (including `forked-master`) triggers it. `workflow_dispatch` is kept as a
+  fallback but is only usable once the file reaches the default branch.
 - Permissions: `contents: read`, `id-token: write` (unlocks npm provenance via OIDC).
 - Resolve tag through `env:` (never direct `${{ }}` interpolation in `run:`) —
   GHA injection hardening.

@@ -1,20 +1,28 @@
 name: "📦 npm Publish"
 
-# Fires once a GitHub release leaves draft (the manual gate). Stable releases
-# publish to npm's `latest` dist-tag; SemVer prereleases (vX.Y.Z-beta.N) publish
-# to `beta` so `bunx @drakulavich/peon-pet@latest` users do not get unstable builds.
+# Fires on a pushed `v*` tag (the manual gate — you cut the tag when ready).
+# A push event runs the workflow file FROM THE PUSHED TAG'S OWN COMMIT, so this
+# works on any branch (e.g. forked-master) without the workflow needing to live
+# on the repo's default branch — unlike `release`/`workflow_dispatch`, which
+# always read the default branch's copy. Stable tags publish to npm's `latest`
+# dist-tag; SemVer prereleases (vX.Y.Z-beta.N) publish to `beta` so
+# `bunx @drakulavich/peon-pet@latest` users do not get unstable builds.
 #
 # Runs on macOS (not ubuntu like kesha-voice-kit) because `npm publish` triggers
 # this package's `prepack`, which compiles native/libpeonshell.dylib via clang with
 # `-framework Cocoa -framework WebKit` — macOS-only. macos-14 (Apple Silicon) can
 # cross-compile the x86_64 slice from the SDK, producing the universal2 tarball.
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - "v*"
+  # Manual fallback. NOTE: workflow_dispatch is only usable once this file is on
+  # the repo's default branch (GitHub reads dispatchable workflows from there).
+  # The `push: tags` trigger above is the path that works from forked-master.
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to publish (must already exist and have a published GitHub release)"
+        description: "Existing tag to publish (must already exist in the repo)"
         required: true
 
 # id-token: write does double duty here: it authenticates the publish via npm
@@ -30,17 +38,19 @@ jobs:
     steps:
       # Resolve tag through env vars, never direct ${{ }} interpolation in run:,
       # to avoid shell injection from a crafted tag while id-token: write is held.
+      # On a tag push, github.ref_name is the tag (e.g. v0.1.1); on a manual
+      # dispatch it is the user-supplied input.
       - name: Resolve tag
         id: tag
         env:
           EVENT_NAME: ${{ github.event_name }}
           INPUT_TAG: ${{ inputs.tag }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             echo "tag=$INPUT_TAG" >> "$GITHUB_OUTPUT"
           else
-            echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+            echo "tag=$REF_NAME" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Checkout at tag
