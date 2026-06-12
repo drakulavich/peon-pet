@@ -2,17 +2,19 @@
 // pet, one per active sub-agent. Shell-agnostic port of main.js's
 // createSubAgentWindow / destroySubAgentWindow / repositionSubAgentWindows + TTL.
 
-import type { NativeShell, WindowHandle } from "../shell/types.ts";
+import type { NativeShell, Point, WindowHandle } from "../shell/types.ts";
 
 export const MAX_SUB_AGENT_WINDOWS = 5;
 export const SUB_AGENT_SIZE = 100;
-export const SUB_AGENT_X = 20;
-/** px from the bottom of the work area to the main pet. */
-export const SUB_AGENT_BASE_Y_OFFSET = 170;
+/** The first mini-pet overlaps the main pet's top edge by this many px, so it
+ *  peeks over the pet's head (the windows are mostly transparent). */
+export const SUB_AGENT_STACK_OVERLAP = SUB_AGENT_SIZE / 2;
 /** Destroy a window whose SubagentStop never fired after this long. */
 export const SUB_AGENT_TTL_MS = 10 * 60 * 1000;
 
 export interface SubAgentManagerOptions {
+  /** Top-left of the main pet window; the mini-pet stack hangs above it. */
+  anchor: () => Point;
   /** Injectable clock so TTL is testable without fake timers. */
   now?: () => number;
   /** Called once when a window is created (e.g. to wire interaction + load it). */
@@ -22,13 +24,15 @@ export interface SubAgentManagerOptions {
 export class SubAgentManager {
   private readonly windows = new Map<string, WindowHandle>();
   private readonly createdAt = new Map<string, number>();
+  private readonly anchor: () => Point;
   private readonly now: () => number;
   private readonly onWindowCreated?: (win: WindowHandle, sessionId: string) => void;
 
   constructor(
     private readonly shell: NativeShell,
-    opts: SubAgentManagerOptions = {},
+    opts: SubAgentManagerOptions,
   ) {
+    this.anchor = opts.anchor;
     this.now = opts.now ?? Date.now;
     this.onWindowCreated = opts.onWindowCreated;
   }
@@ -44,21 +48,22 @@ export class SubAgentManager {
     return [...this.windows.values()].filter((w) => !w.isDestroyed());
   }
 
-  private stackY(workHeight: number, index: number): number {
-    return workHeight - SUB_AGENT_BASE_Y_OFFSET - (index + 1) * SUB_AGENT_SIZE;
+  /** Top-left of stack slot `index`, hanging above the main pet's current position. */
+  private slotPosition(index: number): Point {
+    const pet = this.anchor();
+    return { x: pet.x, y: pet.y - (index + 1) * SUB_AGENT_SIZE + SUB_AGENT_STACK_OVERLAP };
   }
 
   create(sessionId: string): void {
     if (this.windows.size >= MAX_SUB_AGENT_WINDOWS) return;
     if (this.windows.has(sessionId)) return;
 
-    const { height } = this.shell.getPrimaryWorkArea();
-    const idx = this.windows.size;
+    const { x, y } = this.slotPosition(this.windows.size);
     const win = this.shell.createWindow({
       width: SUB_AGENT_SIZE,
       height: SUB_AGENT_SIZE,
-      x: SUB_AGENT_X,
-      y: this.stackY(height, idx),
+      x,
+      y,
       ignoreMouseEvents: true,
     });
 
@@ -75,15 +80,14 @@ export class SubAgentManager {
     this.reposition();
   }
 
-  /** Re-stack remaining windows so there are no gaps after a removal. */
+  /** Re-stack above the pet's current position (after a removal or a pet move). */
   reposition(): void {
-    const { height } = this.shell.getPrimaryWorkArea();
     let i = 0;
     for (const win of this.windows.values()) {
-      if (!win.isDestroyed()) {
-        win.setPosition(SUB_AGENT_X, this.stackY(height, i));
-        i++;
-      }
+      if (win.isDestroyed()) continue;
+      const target = this.slotPosition(i++);
+      const pos = win.getPosition();
+      if (pos.x !== target.x || pos.y !== target.y) win.setPosition(target.x, target.y);
     }
   }
 

@@ -79,18 +79,26 @@ win.show();
 const pumpHandle = shell.startPumping(16);
 
 // Per-window hover→click-through (+ drag for the main window). Pruned as windows die.
+// Also keeps the sub-agent stack glued above the pet while it is dragged.
 const interactions: { it: WindowInteraction; win: WindowHandle }[] = [];
 interactions.push({ it: new WindowInteraction(shell, win, { draggable: true }), win });
+let lastPetPos = win.getPosition();
 const hoverHandle = setInterval(() => {
   for (let i = interactions.length - 1; i >= 0; i--) {
     if (interactions[i].win.isDestroyed()) interactions.splice(i, 1);
     else interactions[i].it.tick();
+  }
+  const petPos = win.getPosition();
+  if (petPos.x !== lastPetPos.x || petPos.y !== lastPetPos.y) {
+    lastPetPos = petPos;
+    subAgents.reposition();
   }
 }, 50);
 
 // ── Sub-agent mini-windows ────────────────────────────────────────────────────
 let petVisible = true;
 const subAgents = new SubAgentManager(shell, {
+  anchor: () => win.getPosition(),
   onWindowCreated: (subWin) => {
     subWin.loadURL(RENDERER_URL);
     if (petVisible) subWin.show();

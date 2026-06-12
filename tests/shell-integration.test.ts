@@ -4,10 +4,10 @@ import { parseShellMessage } from "../src/shell/types.ts";
 import { WindowInteraction } from "../src/app/window-interaction.ts";
 import {
   SubAgentManager,
+  type SubAgentManagerOptions,
   MAX_SUB_AGENT_WINDOWS,
   SUB_AGENT_SIZE,
-  SUB_AGENT_X,
-  SUB_AGENT_BASE_Y_OFFSET,
+  SUB_AGENT_STACK_OVERLAP,
   SUB_AGENT_TTL_MS,
 } from "../src/app/sub-agent-manager.ts";
 
@@ -126,23 +126,46 @@ describe("WindowInteraction — drag", () => {
 // ─── Sub-agent create / destroy / restack ────────────────────────────────────
 
 describe("SubAgentManager", () => {
+  // Main pet at the default bottom-left corner of a 1920×1080 work area
+  // (x = margin 20, y = 1080 − 200 − 20).
+  const PET_POS = { x: 20, y: 860 };
+  const slotY = (petY: number, i: number) => petY - (i + 1) * SUB_AGENT_SIZE + SUB_AGENT_STACK_OVERLAP;
+  const mkMgr = (shell: FakeShell, opts: Partial<SubAgentManagerOptions> = {}) =>
+    new SubAgentManager(shell, { anchor: () => PET_POS, ...opts });
+
   test("creates a window stacked above the main pet", () => {
     const shell = new FakeShell();
-    shell.setWorkArea(1920, 1080);
-    const mgr = new SubAgentManager(shell);
+    const mgr = mkMgr(shell);
     mgr.create("s1");
     expect(mgr.count()).toBe(1);
     const win = shell.liveWindows()[0];
     expect(win.getSize()).toEqual({ width: SUB_AGENT_SIZE, height: SUB_AGENT_SIZE });
-    expect(win.getPosition()).toEqual({
-      x: SUB_AGENT_X,
-      y: 1080 - SUB_AGENT_BASE_Y_OFFSET - 1 * SUB_AGENT_SIZE, // first slot
-    });
+    expect(win.getPosition()).toEqual({ x: PET_POS.x, y: slotY(PET_POS.y, 0) });
+  });
+
+  test("stacks relative to the pet's current position, not a fixed corner", () => {
+    const shell = new FakeShell();
+    const mgr = mkMgr(shell, { anchor: () => ({ x: 700, y: 300 }) });
+    mgr.create("s1");
+    mgr.create("s2");
+    const [w1, w2] = shell.windows;
+    expect(w1.getPosition()).toEqual({ x: 700, y: slotY(300, 0) });
+    expect(w2.getPosition()).toEqual({ x: 700, y: slotY(300, 1) });
+  });
+
+  test("reposition() follows the pet after it moves (drag)", () => {
+    const shell = new FakeShell();
+    let pet = { x: 20, y: 860 };
+    const mgr = mkMgr(shell, { anchor: () => pet });
+    mgr.create("s1");
+    pet = { x: 1500, y: 400 };
+    mgr.reposition();
+    expect(shell.windows[0].getPosition()).toEqual({ x: 1500, y: slotY(400, 0) });
   });
 
   test("ignores duplicate session ids", () => {
     const shell = new FakeShell();
-    const mgr = new SubAgentManager(shell);
+    const mgr = mkMgr(shell);
     mgr.create("s1");
     mgr.create("s1");
     expect(mgr.count()).toBe(1);
@@ -150,7 +173,7 @@ describe("SubAgentManager", () => {
 
   test(`caps at ${MAX_SUB_AGENT_WINDOWS} windows`, () => {
     const shell = new FakeShell();
-    const mgr = new SubAgentManager(shell);
+    const mgr = mkMgr(shell);
     for (let i = 0; i < MAX_SUB_AGENT_WINDOWS + 3; i++) mgr.create(`s${i}`);
     expect(mgr.count()).toBe(MAX_SUB_AGENT_WINDOWS);
     expect(shell.liveWindows()).toHaveLength(MAX_SUB_AGENT_WINDOWS);
@@ -158,8 +181,7 @@ describe("SubAgentManager", () => {
 
   test("destroy removes the window and re-stacks the remainder", () => {
     const shell = new FakeShell();
-    shell.setWorkArea(1920, 1080);
-    const mgr = new SubAgentManager(shell);
+    const mgr = mkMgr(shell);
     mgr.create("s1");
     mgr.create("s2");
     mgr.create("s3");
@@ -169,14 +191,13 @@ describe("SubAgentManager", () => {
     expect(w1.isDestroyed()).toBe(true);
     expect(mgr.count()).toBe(2);
     // remaining windows re-stack into slots 0 and 1 (no gap)
-    const baseY = 1080 - SUB_AGENT_BASE_Y_OFFSET;
-    expect(w2.getPosition().y).toBe(baseY - 1 * SUB_AGENT_SIZE);
-    expect(w3.getPosition().y).toBe(baseY - 2 * SUB_AGENT_SIZE);
+    expect(w2.getPosition().y).toBe(slotY(PET_POS.y, 0));
+    expect(w3.getPosition().y).toBe(slotY(PET_POS.y, 1));
   });
 
   test("a freed slot can be reused after destroy", () => {
     const shell = new FakeShell();
-    const mgr = new SubAgentManager(shell);
+    const mgr = mkMgr(shell);
     for (let i = 0; i < MAX_SUB_AGENT_WINDOWS; i++) mgr.create(`s${i}`);
     expect(mgr.count()).toBe(MAX_SUB_AGENT_WINDOWS);
     mgr.destroy("s0");
@@ -188,7 +209,7 @@ describe("SubAgentManager", () => {
   test("sweepExpired destroys windows past the TTL (injected clock)", () => {
     let t = 1_000_000;
     const shell = new FakeShell();
-    const mgr = new SubAgentManager(shell, { now: () => t });
+    const mgr = mkMgr(shell, { now: () => t });
     mgr.create("stale");
     t += SUB_AGENT_TTL_MS + 1;
     mgr.create("fresh");
@@ -200,7 +221,7 @@ describe("SubAgentManager", () => {
   test("onWindowCreated fires once per new window with its session id", () => {
     const shell = new FakeShell();
     const created: string[] = [];
-    const mgr = new SubAgentManager(shell, {
+    const mgr = mkMgr(shell, {
       onWindowCreated: (_win, sessionId) => created.push(sessionId),
     });
     mgr.create("a");
@@ -211,7 +232,7 @@ describe("SubAgentManager", () => {
 
   test("destroyAll tears down every window", () => {
     const shell = new FakeShell();
-    const mgr = new SubAgentManager(shell);
+    const mgr = mkMgr(shell);
     mgr.create("s1");
     mgr.create("s2");
     mgr.destroyAll();
