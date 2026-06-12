@@ -13,9 +13,6 @@ export interface Size {
   height: number;
 }
 
-/** A screen rectangle in the same top-left-origin space. */
-export interface Rect extends Point, Size {}
-
 /** Usable area of a display (excludes menu bar / dock). */
 export type WorkArea = Size;
 

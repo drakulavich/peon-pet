@@ -46,7 +46,6 @@ function loadLib(dylibPath: string) {
     peon_work_height: { args: [], returns: FFIType.f64 },
     peon_cursor_x: { args: [], returns: FFIType.f64 },
     peon_cursor_y: { args: [], returns: FFIType.f64 },
-    peon_run: { args: [], returns: FFIType.void },
     peon_pump_begin: { args: [], returns: FFIType.void },
     peon_pump: { args: [], returns: FFIType.void },
     peon_set_message_callback: { args: [FFIType.ptr], returns: FFIType.void },
@@ -262,11 +261,6 @@ export class AppKitShell implements NativeShell {
 
   onDockMenuClick(cb: (id: string) => void): void {
     this.#dockClickHandler = cb;
-  }
-
-  /** Enter the AppKit run loop. Blocks; the GUI lives here. (Used by the spike.) */
-  run(): void {
-    this.#sym.peon_run();
   }
 
   /**
