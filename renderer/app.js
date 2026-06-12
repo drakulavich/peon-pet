@@ -1,17 +1,10 @@
 import * as THREE from '../node_modules/three/build/three.module.js';
+import { ANIM_CONFIG, computeUVs } from './anim-state.js';
 
 // --- Config ---
-const ATLAS_COLS = 6;
-const ATLAS_ROWS = 6;
-
-const ANIM_CONFIG = {
-  sleeping:  { row: 0, frames: 6, fps: 3,  loop: true  },
-  waking:    { row: 1, frames: 6, fps: 2,  loop: false, loops: 1 },
-  typing:    { row: 2, frames: 6, fps: 8,  loop: false },
-  alarmed:   { row: 3, frames: 6, fps: 8,  loop: false },
-  celebrate: { row: 4, frames: 6, fps: 8,  loop: false },
-  annoyed:   { row: 5, frames: 6, fps: 8,  loop: false },
-};
+const WIN_SIZE = 200;               // initial window size (sub-agents resize via peon-config)
+const HALF = WIN_SIZE / 2;
+const SPRITE_SIZE = WIN_SIZE * 0.9; // sprite/bg fill most of the window
 
 // --- Scene setup ---
 const canvas = document.getElementById('c');
@@ -20,19 +13,19 @@ const renderer = new THREE.WebGLRenderer({
   alpha: true,
   antialias: false,
 });
-renderer.setSize(200, 200);
+renderer.setSize(WIN_SIZE, WIN_SIZE);
 renderer.setPixelRatio(window.devicePixelRatio);
 renderer.setClearColor(0x000000, 0);
 
 const scene = new THREE.Scene();
 
-const camera = new THREE.OrthographicCamera(-100, 100, 100, -100, 0.1, 10);
+const camera = new THREE.OrthographicCamera(-HALF, HALF, HALF, -HALF, 0.1, 10);
 camera.position.z = 1;
 
 // --- Background ---
 const bgTex = new THREE.TextureLoader().load('peon-asset://bg.png');
 const bgMesh = new THREE.Mesh(
-  new THREE.PlaneGeometry(180, 180),
+  new THREE.PlaneGeometry(SPRITE_SIZE, SPRITE_SIZE),
   new THREE.MeshBasicMaterial({ map: bgTex, color: 0x888888 })
 );
 bgMesh.position.z = -0.5;
@@ -47,8 +40,8 @@ const atlas = loader.load('peon-asset://sprite-atlas.png', () => {
   atlas.needsUpdate = true;
 });
 
-// Square sprite — fills most of the 200×200 window
-let geometry = new THREE.PlaneGeometry(180, 180);
+// Square sprite — fills most of the window
+let geometry = new THREE.PlaneGeometry(SPRITE_SIZE, SPRITE_SIZE);
 const material = new THREE.MeshBasicMaterial({
   map: atlas,
   transparent: true,
@@ -84,7 +77,7 @@ async function setupFlash() {
     depthTest: false,
   });
 
-  const flashGeo = new THREE.PlaneGeometry(200, 200);
+  const flashGeo = new THREE.PlaneGeometry(WIN_SIZE, WIN_SIZE);
   flashMesh = new THREE.Mesh(flashGeo, flashMat);
   flashMesh.position.z = 0.5;
   scene.add(flashMesh);
@@ -99,7 +92,7 @@ const borderTex = loader.load('peon-asset://borders.png', () => {
   borderTex.needsUpdate = true;
 });
 const borderMesh = new THREE.Mesh(
-  new THREE.PlaneGeometry(200, 200),
+  new THREE.PlaneGeometry(WIN_SIZE, WIN_SIZE),
   new THREE.MeshBasicMaterial({ map: borderTex, transparent: true, depthTest: false })
 );
 borderMesh.position.z = 0.4;
@@ -110,6 +103,10 @@ const MAX_DOTS = 10;
 const DOT_SIZE = 12;
 const DOT_GAP  = 6;
 const DOT_Y    = 88;
+
+const DOT_HOT  = 0x44ff44; // actively working — bright green, pulsing
+const DOT_WARM = 0x1a4d1a; // open but idle — dim green
+const DOT_COLD = 0x333333; // cold — grey
 
 const DOT_VERT = `
   varying vec2 vUv;
@@ -139,7 +136,7 @@ const DOT_FRAG = `
 `;
 
 const dotMeshes = [];
-const dotStates = [];  // { active: bool }
+const dotActive = [];  // hot dots pulse in the render loop
 
 for (let i = 0; i < MAX_DOTS; i++) {
   const mat = new THREE.ShaderMaterial({
@@ -157,27 +154,32 @@ for (let i = 0; i < MAX_DOTS; i++) {
   mesh.position.z = 0.6;
   scene.add(mesh);
   dotMeshes.push(mesh);
-  dotStates.push({ active: false });
+  dotActive.push(false);
+}
+
+// X of the first dot's center, for a row of `count` dots centered at x=0.
+// Shared by updateDots (visuals) and hitTestDots (hover) so they can't disagree.
+function dotStartX(count) {
+  const totalWidth = count * DOT_SIZE + Math.max(0, count - 1) * DOT_GAP;
+  return -totalWidth / 2 + DOT_SIZE / 2;
 }
 
 function updateDots(sessions) {
   const count = Math.min(sessions.length, MAX_DOTS);
-  const totalWidth = count * DOT_SIZE + Math.max(0, count - 1) * DOT_GAP;
-  const startX = -totalWidth / 2 + DOT_SIZE / 2;
+  const startX = dotStartX(count);
 
   for (let i = 0; i < MAX_DOTS; i++) {
     const mesh = dotMeshes[i];
     const u    = mesh.material.uniforms;
     if (i < count) {
       const { hot, warm } = sessions[i];
-      dotStates[i].active = hot;
+      dotActive[i] = hot;
       mesh.position.x = startX + i * (DOT_SIZE + DOT_GAP);
       mesh.position.y = DOT_Y;
-      // hot = bright green pulsing, warm = dim green static, else grey
-      u.dotColor.value.set(hot ? 0x44ff44 : warm ? 0x1a4d1a : 0x333333);
+      u.dotColor.value.set(hot ? DOT_HOT : warm ? DOT_WARM : DOT_COLD);
       u.visible.value = 1.0;
     } else {
-      dotStates[i].active = false;
+      dotActive[i] = false;
       u.visible.value = 0.0;
     }
   }
@@ -189,75 +191,6 @@ function triggerFlash(r, g, b, intensity = 0.6, decay = 3.0) {
   flashMesh.material.uniforms.flashColor.value = flashColor;
   flashIntensity = intensity;
   flashDecay = decay;
-}
-
-// --- Particle burst ---
-const PARTICLE_COUNT = 30;
-const particlePositions = new Float32Array(PARTICLE_COUNT * 3);
-const particleColors = new Float32Array(PARTICLE_COUNT * 3);
-const particleVelocities = new Array(PARTICLE_COUNT);
-
-const particleGeo = new THREE.BufferGeometry();
-particleGeo.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
-particleGeo.setAttribute('color', new THREE.BufferAttribute(particleColors, 3));
-
-const particleMat = new THREE.PointsMaterial({
-  size: 6,
-  vertexColors: true,
-  transparent: true,
-  opacity: 1.0,
-  depthTest: false,
-  sizeAttenuation: false,
-});
-
-const particles = new THREE.Points(particleGeo, particleMat);
-particles.visible = false;
-particles.position.z = 0.8;
-scene.add(particles);
-
-let particleLifetime = 0;
-const PARTICLE_DURATION = 1.2;
-
-function burstParticles() {
-  particleLifetime = PARTICLE_DURATION;
-  particles.visible = true;
-  particleMat.opacity = 1.0;
-
-  const goldColors = [
-    [1.0, 0.85, 0.0],
-    [1.0, 1.0,  0.4],
-    [0.9, 0.6,  0.1],
-  ];
-
-  for (let i = 0; i < PARTICLE_COUNT; i++) {
-    particlePositions[i * 3]     = (Math.random() - 0.5) * 40;
-    particlePositions[i * 3 + 1] = -40 + (Math.random() - 0.5) * 20;
-    particlePositions[i * 3 + 2] = 0;
-
-    const angle = (Math.random() * Math.PI) - Math.PI / 2;
-    const speed = 40 + Math.random() * 80;
-    particleVelocities[i] = {
-      x: Math.cos(angle) * speed,
-      vy: Math.abs(Math.sin(angle)) * speed + 20,
-      gravity: -60 - Math.random() * 40,
-    };
-
-    const c = goldColors[Math.floor(Math.random() * goldColors.length)];
-    particleColors[i * 3]     = c[0];
-    particleColors[i * 3 + 1] = c[1];
-    particleColors[i * 3 + 2] = c[2];
-  }
-
-  particleGeo.attributes.position.needsUpdate = true;
-  particleGeo.attributes.color.needsUpdate = true;
-}
-
-// --- Screen shake ---
-let shakeIntensity = 0;
-const SHAKE_DECAY = 8.0;
-
-function triggerShake(intensity = 12) {
-  shakeIntensity = intensity;
 }
 
 // --- ANIM_FLASH map ---
@@ -286,12 +219,7 @@ function resetIdleTimer() {
 }
 
 function setFrame(animName, frame) {
-  const { row } = ANIM_CONFIG[animName];
-  // UV coords: u left→right, v bottom=0/top=1 (Three.js convention)
-  const u0 = frame / ATLAS_COLS;
-  const u1 = (frame + 1) / ATLAS_COLS;
-  const v0 = (ATLAS_ROWS - 1 - row) / ATLAS_ROWS;  // bottom of this row
-  const v1 = (ATLAS_ROWS - row) / ATLAS_ROWS;       // top of this row
+  const { u0, u1, v0, v1 } = computeUVs(animName, frame);
   // PlaneGeometry vertex UV order: [0]=TL, [1]=TR, [2]=BL, [3]=BR
   const uv = geometry.attributes.uv;
   uv.setXY(0, u0, v1); // TL
@@ -327,12 +255,11 @@ let currentSessions = [];
 function hitTestDots(px, py) {
   const count = Math.min(currentSessions.length, MAX_DOTS);
   if (count === 0) return -1;
-  const totalWidth = count * DOT_SIZE + Math.max(0, count - 1) * DOT_GAP;
-  const startThreeX = -totalWidth / 2 + DOT_SIZE / 2;
-  const dotCanvasY = 100 - DOT_Y;  // Three.js DOT_Y=88 → canvas pixel y=12
+  const startThreeX = dotStartX(count);
+  const dotCanvasY = HALF - DOT_Y;  // Three.js DOT_Y=88 → canvas pixel y=12
   const HIT_R = DOT_SIZE;           // slightly wider than visual for easier hover
   for (let i = 0; i < count; i++) {
-    const dotCanvasX = startThreeX + i * (DOT_SIZE + DOT_GAP) + 100;
+    const dotCanvasX = startThreeX + i * (DOT_SIZE + DOT_GAP) + HALF;
     const dx = px - dotCanvasX;
     const dy = py - dotCanvasY;
     if (dx * dx + dy * dy < HIT_R * HIT_R) return i;
@@ -380,7 +307,7 @@ function handleMouseMove(e) {
     const status = s.hot ? '<span style="color:#44ff44">active</span>'
                          : s.warm ? '<span style="color:#1aaa1a">idle</span>'
                          : '<span style="color:#555">cold</span>';
-    const label = s.cwd ? s.cwd.split('/').filter(Boolean).pop() : ('\u2026' + s.id.slice(-8));
+    const label = s.name || ('\u2026' + s.id.slice(-8));
     html = `${label} &bull; ${status}`;
   } else {
     const active = currentSessions.filter(s => s.hot).length;
@@ -388,9 +315,7 @@ function handleMouseMove(e) {
     if (total === 0) {
       html = 'Peon Pet';
     } else {
-      const names = currentSessions
-        .map(s => s.cwd ? s.cwd.split('/').filter(Boolean).pop() : null)
-        .filter(Boolean);
+      const names = currentSessions.map(s => s.name).filter(Boolean);
       html = names.length ? names.join('<br>') : `${active}/${total} sessions`;
     }
   }
@@ -399,8 +324,8 @@ function handleMouseMove(e) {
   // Position tooltip: prefer to the right/below cursor, clamped inside window
   const tw = tooltip.offsetWidth;
   const th = tooltip.offsetHeight;
-  tooltip.style.left = Math.min(px + 6, 200 - tw - 2) + 'px';
-  tooltip.style.top  = Math.min(py + 6, 200 - th - 2) + 'px';
+  tooltip.style.left = Math.min(px + 6, WIN_SIZE - tw - 2) + 'px';
+  tooltip.style.top  = Math.min(py + 6, WIN_SIZE - th - 2) + 'px';
 }
 
 function handleMouseLeave() {
@@ -489,7 +414,7 @@ function animate(time) {
 
   // Animate dot pulse
   for (let i = 0; i < MAX_DOTS; i++) {
-    if (dotStates[i].active) {
+    if (dotActive[i]) {
       dotMeshes[i].material.uniforms.pulse.value = (Math.sin(time * 0.003 + i) + 1) / 2;
     } else {
       dotMeshes[i].material.uniforms.pulse.value = 0.0;
@@ -500,25 +425,6 @@ function animate(time) {
   if (flashMesh && flashIntensity > 0) {
     flashIntensity = Math.max(0, flashIntensity - delta * flashDecay);
     flashMesh.material.uniforms.flashIntensity.value = flashIntensity;
-  }
-
-  // Update particles
-  if (particleLifetime > 0) {
-    particleLifetime -= delta;
-    particleMat.opacity = Math.max(0, particleLifetime / PARTICLE_DURATION);
-
-    for (let i = 0; i < PARTICLE_COUNT; i++) {
-      const v = particleVelocities[i];
-      if (!v) continue;
-      particlePositions[i * 3]     += v.x * delta;
-      particlePositions[i * 3 + 1] += v.vy * delta;
-      v.vy += v.gravity * delta;
-    }
-    particleGeo.attributes.position.needsUpdate = true;
-
-    if (particleLifetime <= 0) {
-      particles.visible = false;
-    }
   }
 
   // Advance animation frame
@@ -552,16 +458,6 @@ function animate(time) {
       }
     }
     setFrame(currentAnim, currentFrame);
-  }
-
-  // Screen shake
-  if (shakeIntensity > 0) {
-    shakeIntensity = Math.max(0, shakeIntensity - SHAKE_DECAY * delta);
-    sprite.position.x = (Math.random() - 0.5) * shakeIntensity;
-    sprite.position.y = (Math.random() - 0.5) * shakeIntensity;
-  } else {
-    sprite.position.x = 0;
-    sprite.position.y = 0;
   }
 
   renderer.render(scene, camera);

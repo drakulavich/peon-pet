@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { ANIM_CONFIG, computeUVs, ATLAS_COLS, ATLAS_ROWS } from "../src/app/anim-state.ts";
+import { ANIM_CONFIG, computeUVs, ATLAS_COLS, ATLAS_ROWS } from "../renderer/anim-state.js";
 
 // ─── ANIM_CONFIG ──────────────────────────────────────────────────────────────
 
@@ -38,6 +38,11 @@ describe("ANIM_CONFIG", () => {
 
   test("alarmed does not loop", () => {
     expect(ANIM_CONFIG.alarmed.loop).toBe(false);
+  });
+
+  test("waking plays slowly and only once (fps 2, 1 loop)", () => {
+    expect(ANIM_CONFIG.waking.fps).toBe(2);
+    expect(ANIM_CONFIG.waking.loops).toBe(1);
   });
 
   test("each anim has row, frames, fps, loop", () => {

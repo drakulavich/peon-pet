@@ -5,6 +5,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import { EventEmitter } from "node:events";
+import { isValidSessionId } from "./session-tracker.ts";
 
 const PROJECTS_DIR = path.join(os.homedir(), ".claude", "projects");
 const SCAN_INTERVAL_MS = 1000;
@@ -13,8 +14,6 @@ const SESSION_PRUNE_MS = 10 * 60 * 1000; // skip files older than 10min on start
 const PERMISSION_TIMEOUT_MS = 7000;
 const SUBAGENT_IDLE_MS = 5000; // subagent window closes after 5s of no new content
 const PERMISSION_EXEMPT_TOOLS = new Set(["Task", "Agent", "AskUserQuestion"]);
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export type SessionEventName =
   | "SessionStart"
@@ -58,7 +57,7 @@ interface FileState {
 
 function sessionIdFromPath(filePath: string): string | null {
   const base = path.basename(filePath, ".jsonl");
-  return UUID_RE.test(base) ? base : null;
+  return isValidSessionId(base) ? base : null;
 }
 
 /**
@@ -138,7 +137,7 @@ export class JsonlWatcher extends EventEmitter {
         for (const entry of entries) {
           if (entry.isFile() && entry.name.endsWith(".jsonl")) {
             this._registerFile(path.join(dir, entry.name));
-          } else if (entry.isDirectory() && UUID_RE.test(entry.name)) {
+          } else if (entry.isDirectory() && isValidSessionId(entry.name)) {
             // Session subdirectory — scan for background subagent files
             this._scanSubagentsDir(path.join(dir, entry.name, "subagents"), entry.name);
           }

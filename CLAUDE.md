@@ -55,11 +55,12 @@ Layers:
   - `asset-resolver.ts` — resolves `peon-asset://` URLs to absolute file paths, with user
     character dirs overriding bundled assets.
   - `config.ts`, `cli.ts`, `characters.ts`, `window-position.ts`, `window-interaction.ts`,
-    `anim-state.ts`, `single-instance.ts`.
+    `single-instance.ts`.
 - `native/peonshell.m` — thin AppKit/WebKit C shim (`NSPanel` + `WKWebView` + a custom
   `peon-asset://` scheme handler). Compiled to `native/libpeonshell.dylib` by `build:native`.
 - `renderer/` — the Three.js renderer (`app.js`, `index.html`, shaders, assets), loaded over
-  `peon-asset://app/renderer/index.html`. Native→renderer messaging goes through
+  `peon-asset://app/renderer/index.html`. `renderer/anim-state.js` holds the sprite-atlas
+  animation config + UV math, shared by `app.js` and the test suite (single source of truth). Native→renderer messaging goes through
   `window.__peonEmit(channel, data)` injected via `evaluateJS`.
 
 ### How a Claude Code event becomes an animation
