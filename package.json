@@ -1,6 +1,6 @@
 {
   "name": "@drakulavich/peon-pet",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A macOS desktop pet for Peon-Ping — an orc that reacts to your Claude Code events. Native Bun + AppKit (no Electron).",
   "type": "module",
   "module": "src/main.ts",
