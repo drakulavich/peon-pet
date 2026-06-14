@@ -1,0 +1,31 @@
+schema: spec-driven
+
+context: |
+  peon-pet (`@drakulavich/peon-pet`): a macOS desktop pet for Peon-Ping — an orc that
+  sits in a screen corner, floats over every window, passes clicks through (hover-only
+  for tooltips), and reacts to Claude Code events with sprite animations. It watches
+  Claude Code Session JSONL transcripts (`~/.claude/projects/`) and shows one "session
+  dot" per Active session, plus mini-pets for Sub-agents. Built on Bun + AppKit (an
+  `NSPanel` driven via `bun:ffi`) + Three.js rendered in system WebKit — no Electron;
+  the project is migrating off a former Node/Electron shell.
+  Conventions: TypeScript run directly by Bun (no build step); macOS only
+  (Linux/Windows are explicit non-goals); the `renderer/` (HTML + Three.js + shaders)
+  is reused verbatim and the shell must not require renderer changes; all OS-touching
+  code sits behind the NativeShell seam (the only FFI-backed impl is AppKitShell) so it
+  can be faked (FakeShell) for headless `bun test`.
+  OpenSpec: capabilities live in `openspec/specs/<capability>/spec.md`; proposed work in
+  `openspec/changes/<id>/` (`proposal.md` / `design.md` / `tasks.md` + spec deltas).
+  See openspec/specs/README.md for the spec-authoring lens (and the validator's
+  first-line-SHALL rule), GLOSSARY.md for the ubiquitous language.
+
+rules:
+  proposal:
+    - Always include a "Non-goals" section
+  specs:
+    - Use glossary terms from openspec/specs/GLOSSARY.md verbatim
+    - Every requirement needs at least one happy-path and one error/edge scenario
+    - State outcomes, not implementation mechanisms, in requirement text
+    - Reference named personas/roles (Vlad/Mira/Dana), never a generic "user/system"
+    - Record anything uncertain or where spec and code disagree under "Open Issues" — never invent a resolution
+    - Trace each requirement to code with file:line refs in a Technical Note
+    - 'Lead the requirement''s first plain line with "The system SHALL …" — the validator scans line 1, so no leading bold and no "[Must]" tag; put priority and role on a trailing italic line (Priority then Role)'
