@@ -3,27 +3,85 @@
 // (Apple Silicon or Intel); the prebuilt universal native shim ships in the package.
 
 import { existsSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
+import { dispatchCopilotHook, MAX_COPILOT_HOOK_INPUT_BYTES } from "../src/app/copilot-cli.ts";
+import { installCopilotHooks, uninstallCopilotHooks } from "../src/app/copilot-hooks.ts";
 
 const pkgRoot = join(import.meta.dir, "..");
 const dylib = join(pkgRoot, "native", "libpeonshell.dylib");
+const args = process.argv.slice(2);
 
-// The package ships a prebuilt universal (arm64 + x86_64) dylib. If it's missing
-// (deleted, or a source-only install), try to compile it — needs Apple's clang (Xcode CLT).
-if (!existsSync(dylib)) {
-  console.error("peon-pet: native shim missing — building (needs Xcode Command Line Tools)…");
-  const r = Bun.spawnSync(["bun", "run", "build:native"], {
-    cwd: pkgRoot,
-    stdout: "inherit",
-    stderr: "inherit",
-  });
-  if (r.exitCode !== 0) {
-    console.error(
-      "peon-pet: could not build the native shim. Requires Apple Silicon macOS + Xcode Command Line Tools (`xcode-select --install`).",
-    );
-    process.exit(1);
+if (args[0] === "copilot") {
+  const environment = {
+    home: homedir(),
+    copilotHome: process.env.COPILOT_HOME,
+  };
+  try {
+    if (args[1] === "install" && args.length === 2) {
+      const result = installCopilotHooks({
+        ...environment,
+        executablePath: join(import.meta.dir, "peon-pet"),
+      });
+      console.log(result === "installed" ? "Copilot CLI hooks installed." : "Copilot CLI hooks already installed.");
+    } else if (args[1] === "uninstall" && args.length === 2) {
+      const removed = uninstallCopilotHooks(environment);
+      console.log(removed ? "Copilot CLI hooks removed." : "Copilot CLI hooks were not installed.");
+    } else {
+      throw new Error("Usage: peon-pet copilot <install|uninstall>");
+    }
+  } catch (error) {
+    console.error(`peon-pet: ${error instanceof Error ? error.message : String(error)}`);
+    process.exitCode = 1;
   }
-}
+} else if (args[0] === "--copilot-hook") {
+  const hookName = args[1] ?? "";
+  let oversized = false;
+  let size = 0;
+  const chunks: Uint8Array[] = [];
+  let result: "delivered" | "invalid" | "unavailable" = "unavailable";
+  try {
+    for await (const chunk of Bun.stdin.stream()) {
+      size += chunk.byteLength;
+      if (size > MAX_COPILOT_HOOK_INPUT_BYTES) {
+        oversized = true;
+        chunks.length = 0;
+      } else if (!oversized) {
+        chunks.push(chunk);
+      }
+    }
+    result = oversized
+      ? "invalid"
+      : await dispatchCopilotHook(
+          hookName,
+          Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))).toString("utf8"),
+        );
+  } catch {
+    result = "unavailable";
+  }
+  if (result === "unavailable") {
+    console.error("peon-pet: Copilot event not delivered; is peon-pet running and allowed to access its socket?");
+  } else if (result === "invalid") {
+    console.error("peon-pet: ignored invalid Copilot hook payload.");
+  }
+} else {
+  // The package ships a prebuilt universal (arm64 + x86_64) dylib. If it's missing
+  // (deleted, or a source-only install), try to compile it — needs Apple's clang (Xcode CLT).
+  if (!existsSync(dylib)) {
+    console.error("peon-pet: native shim missing — building (needs Xcode Command Line Tools)...");
+    const r = Bun.spawnSync(["bun", "run", "build:native"], {
+      cwd: pkgRoot,
+      stdout: "inherit",
+      stderr: "inherit",
+    });
+    if (r.exitCode !== 0) {
+      console.error(
+        "peon-pet: could not build the native shim. Requires Apple Silicon macOS + Xcode Command Line Tools (`xcode-select --install`).",
+      );
+      process.exit(1);
+    }
+  }
 
-// main.ts executes on import and reads process.argv (--character/--corner/--dev).
-await import(join(pkgRoot, "src", "main.ts"));
+  // main.ts executes on import and reads process.argv (--character/--corner/--dev).
+  await import(join(pkgRoot, "src", "main.ts"));
+}

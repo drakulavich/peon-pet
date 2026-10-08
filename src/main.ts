@@ -1,6 +1,6 @@
 // peon-pet entrypoint (Bun + AppKit). Composition root: wires the AppKit shell,
-// the asset resolver, the JSONL watcher, and the session tracker so the orc
-// reacts to Claude Code events. Port of main.js's orchestration.
+// the asset resolver, event sources, and session tracker so the orc reacts to
+// Claude Code and Copilot CLI events.
 //
 //   bun run build:native && bun run src/main.ts [--character <name>] [--corner <c>]
 
@@ -22,6 +22,9 @@ import { JsonlWatcher, type SessionEvent } from "./app/jsonl-watcher.ts";
 import { WindowInteraction } from "./app/window-interaction.ts";
 import { SubAgentManager, SUB_AGENT_SIZE } from "./app/sub-agent-manager.ts";
 import { acquireSingleInstance } from "./app/single-instance.ts";
+import { applyCopilotSessionEvent, shouldApplyCopilotEvent } from "./app/copilot-session.ts";
+import { copilotSocketPath, listenForCopilotEvents } from "./app/copilot-ipc.ts";
+import type { CopilotPetEvent } from "./app/copilot-events.ts";
 import type { WindowHandle } from "./shell/types.ts";
 
 // Single-instance guard: bail if another peon-pet is already running.
@@ -143,9 +146,13 @@ function emit(channel: string, data: unknown): void {
   win.evaluateJS(`window.__peonEmit(${JSON.stringify(channel)}, ${JSON.stringify(data)})`);
 }
 
-// ── Session tracking (port of main.js) ────────────────────────────────────────
+// ── Shared session display state ──────────────────────────────────────────────
 const tracker = createSessionTracker();
 const sessionCwds = new Map<string, string>();
+const copilotActiveSessions = new Set<string>();
+const copilotActiveTurns = new Set<string>();
+const copilotSubagents = new Map<string, Set<string>>();
+const copilotEndedSessions = new Map<string, number>();
 
 function sendSessionUpdate(now: number): void {
   const sessions = buildSessionStates(tracker.entries(), now, HOT_MS, WARM_MS, MAX_DOTS).map((s) => {
@@ -153,6 +160,13 @@ function sendSessionUpdate(now: number): void {
     return { ...s, cwd, name: cwd ? basename(cwd) : null };
   });
   emit("session-update", { sessions });
+}
+
+function pruneTrackedSessions(now: number): void {
+  tracker.prune(now - PRUNE_MS);
+  for (const id of sessionCwds.keys()) {
+    if (!tracker.entries().some(([sessionId]) => sessionId === id)) sessionCwds.delete(id);
+  }
 }
 
 function handleSessionEvent({ sessionId, event, cwd, timestamp }: SessionEvent): void {
@@ -185,10 +199,7 @@ function handleSessionEvent({ sessionId, event, cwd, timestamp }: SessionEvent):
     if (cwd) sessionCwds.set(sessionId, cwd);
   }
 
-  tracker.prune(now - PRUNE_MS);
-  for (const id of sessionCwds.keys()) {
-    if (!tracker.entries().some(([sid]) => sid === id)) sessionCwds.delete(id);
-  }
+  pruneTrackedSessions(now);
 
   sendSessionUpdate(now);
 
@@ -206,12 +217,72 @@ watcher.on("subagent-event", ({ parentToolId, event }: { parentToolId: string; e
   else if (event === "SubagentStop") subAgents.destroy(parentToolId);
 });
 
+function handleCopilotEvent(event: CopilotPetEvent): void {
+  if (!shouldApplyCopilotEvent(event, copilotEndedSessions)) return;
+  const now = Date.now();
+  if (event.kind === "session") {
+    const result = applyCopilotSessionEvent(event, tracker, sessionCwds);
+    if (result === "ended") {
+      copilotActiveSessions.delete(event.sessionId);
+      copilotActiveTurns.delete(event.sessionId);
+      for (const parentToolId of copilotSubagents.get(event.sessionId) ?? []) {
+        subAgents.destroy(parentToolId);
+      }
+      copilotSubagents.delete(event.sessionId);
+    } else if (event.event === "UserPromptSubmit") {
+      copilotActiveTurns.add(event.sessionId);
+      copilotActiveSessions.add(event.sessionId);
+    } else if (event.event === "Stop") {
+      copilotActiveTurns.delete(event.sessionId);
+      if ((copilotSubagents.get(event.sessionId)?.size ?? 0) === 0) {
+        copilotActiveSessions.delete(event.sessionId);
+      }
+    }
+
+    pruneTrackedSessions(now);
+    sendSessionUpdate(now);
+    const anim = EVENT_TO_ANIM[event.event];
+    if (anim) {
+      emit("peon-event", { anim, event: event.event });
+      if (DEV) console.log(`→ orc: ${anim} (${event.event}) — ${tracker.entries().length} session(s)`);
+    }
+    return;
+  }
+
+  tracker.update(event.sessionId, event.timestamp);
+  if (event.cwd) sessionCwds.set(event.sessionId, event.cwd);
+  const active = copilotSubagents.get(event.sessionId) ?? new Set<string>();
+  if (event.event === "SubagentStart") {
+    active.add(event.parentToolId);
+    copilotSubagents.set(event.sessionId, active);
+    copilotActiveSessions.add(event.sessionId);
+    subAgents.create(event.parentToolId);
+  } else {
+    active.delete(event.parentToolId);
+    subAgents.destroy(event.parentToolId);
+    if (active.size === 0) {
+      copilotSubagents.delete(event.sessionId);
+      if (!copilotActiveTurns.has(event.sessionId)) copilotActiveSessions.delete(event.sessionId);
+    }
+  }
+  pruneTrackedSessions(now);
+  sendSessionUpdate(now);
+}
+
+let copilotEventServer: { close(): void } | null = null;
+try {
+  copilotEventServer = await listenForCopilotEvents(copilotSocketPath(), handleCopilotEvent);
+} catch (error) {
+  console.error("peon-pet: Copilot CLI event listener could not start:", error);
+}
+
 // Heartbeat: keep sessions with pending tools hot, and sweep stale sub-agents.
 const heartbeat = setInterval(() => {
   const now = Date.now();
   subAgents.sweepExpired();
   if (tracker.entries().length === 0) return;
   for (const id of watcher.getActiveSessionIds()) tracker.update(id, now);
+  for (const id of copilotActiveSessions) tracker.update(id, now);
   sendSessionUpdate(now);
 }, 5000);
 
@@ -224,6 +295,7 @@ function shutdown(): void {
   clearInterval(hoverHandle);
   clearInterval(heartbeat);
   watcher.stop();
+  copilotEventServer?.close();
   subAgents.destroyAll();
   win.destroy();
   process.exit(0);

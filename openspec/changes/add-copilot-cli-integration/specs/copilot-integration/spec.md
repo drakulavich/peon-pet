@@ -23,8 +23,11 @@ _Priority: Must. Role: Dana, the shell contributor._
 - **THEN** no session, animation, or Mini-pet state is changed
 - **AND** the hook exits without changing Copilot's behavior
 
-**Technical Note:** The event composition point is `src/main.ts:158-199`; the
-existing event-to-animation mapping is `src/app/session-tracker.ts:70-76`.
+**Technical Note:** Hook payload parsing and allowlisting are implemented in
+`src/app/copilot-events.ts:95,121`; IPC reception validates the compact event
+again in `src/app/copilot-ipc.ts:48,102`. The event composition point is
+`src/main.ts:220`; the existing event-to-animation mapping is
+`src/app/session-tracker.ts:70`.
 
 ### Requirement: Copilot CLI session and Sub-agent state is reflected
 
@@ -46,9 +49,11 @@ _Priority: Must. Role: Dana, the shell contributor._
 - **THEN** only that Copilot CLI session is removed from the Session dots
 - **AND** other Copilot CLI and Claude Code sessions remain tracked
 
-**Technical Note:** Session dots are assembled in `src/main.ts:150-155`;
-Sub-agent events currently route to `SubAgentManager` at `src/main.ts:202-206`,
-whose window lifecycle begins at `src/app/sub-agent-manager.ts:57`.
+**Technical Note:** Session dots are assembled in `src/main.ts:158-163`;
+Copilot session state and end cleanup are handled in
+`src/app/copilot-session.ts:4,25` and `src/main.ts:220`. Sub-agent events
+route to `SubAgentManager` from `src/main.ts:254-267`, whose window lifecycle
+begins at `src/app/sub-agent-manager.ts:57`.
 
 ### Requirement: Copilot CLI hook management is explicit and non-destructive
 
@@ -69,8 +74,9 @@ _Priority: Must. Role: Dana, the shell contributor._
 - **WHEN** the dedicated target filename already contains an unrecognized file
 - **THEN** installation reports the conflict and leaves that file unchanged
 
-**Technical Note:** Application-support path resolution is centralized at
-`src/app/config.ts:32-37`. Copilot's separate `COPILOT_HOME` hook path is new.
+**Technical Note:** Hook path resolution, config generation, ownership
+recognition, install, and uninstall live in `src/app/copilot-hooks.ts:37,120,151`.
+The CLI routes these commands before starting AppKit in `bin/peon-pet:15`.
 
 ### Requirement: Hook failures do not interfere with Copilot CLI
 
@@ -92,24 +98,31 @@ _Priority: Must. Role: Dana, the shell contributor._
   results, responses, or error details
 - **THEN** those fields are not forwarded to Peon Pet or stored by the integration
 
-**Technical Note:** Current event handling and animation dispatch are at
-`src/main.ts:158-199`; payload filtering and local IPC are new integration
-boundaries and must have dedicated unit tests.
+**Technical Note:** The hook dispatcher reads only bounded stdin and forwards
+the allowlisted event in `src/app/copilot-cli.ts:9`; the Unix socket uses a
+private per-user directory and validates frames in `src/app/copilot-ipc.ts:48,102`.
+The launcher handles hook mode before building/loading the native shell in
+`bin/peon-pet:37`.
 
 ## Technical Notes
 
 - Copilot CLI hook collection uses the documented user-level `~/.copilot/hooks/`
-  directory, or `$COPILOT_HOME/hooks/` when configured.
+  directory, or `$COPILOT_HOME/hooks/` when configured. Paths are resolved by
+  `copilotHooksDirectory` at `src/app/copilot-hooks.ts:37`.
 - The hook command receives JSON on stdin and returns an empty hook result.
-- Supported hook-to-animation mappings are defined in the change design.
-- Existing integration points: `src/main.ts:150-206` (session composition),
-  `src/app/session-tracker.ts:23-25` (Claude session identifier validation) and
-  `src/app/session-tracker.ts:70-76` (`EVENT_TO_ANIM`),
+- Copilot session IDs are deterministically mapped to UUID-shaped IDs with a
+  dedicated namespace by `copilotSessionId` at `src/app/copilot-events.ts:46`;
+  Claude transcript UUID validation is unchanged.
+- The listener socket path is resolved from Peon Pet's application-support
+  directory by `src/app/copilot-ipc.ts:11`.
+- Existing integration points: `src/main.ts:157-274` (session composition),
+  `src/app/session-tracker.ts:23` (unchanged Claude session identifier validation) and
+  `src/app/session-tracker.ts:70` (`EVENT_TO_ANIM`),
   `src/app/sub-agent-manager.ts:57-70` (Mini-pet lifecycle), and
   `src/app/config.ts:32-37` (application-support path).
 
 ## Open Issues
 
-- Copilot CLI sandbox access to the local socket must be verified on macOS before
-  promising support for sandboxed sessions.
-- The exact implementation line references will be added after implementation.
+- Copilot CLI sandbox access to the local socket must be confirmed with an
+  installed CLI on macOS; setup documentation warns about this limitation rather
+  than claiming sandboxed-session support.

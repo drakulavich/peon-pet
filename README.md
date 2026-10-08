@@ -1,6 +1,6 @@
 # peon-pet
 
-A macOS desktop pet for [Peon-Ping](https://peonping.com) — an orc that reacts to your Claude Code events with sprite animations. Built on **Bun + AppKit + Three.js** (no Electron — a native `NSPanel` driven via `bun:ffi`, rendering the Three.js scene in system WebKit).
+A macOS desktop pet for [Peon-Ping](https://peonping.com) — an orc that reacts to Claude Code and GitHub Copilot CLI events with sprite animations. Built on **Bun + AppKit + Three.js** (no Electron — a native `NSPanel` driven via `bun:ffi`, rendering the Three.js scene in system WebKit).
 
 <video src="https://github.com/user-attachments/assets/7fd9a2cb-d227-49ad-8ccc-7953ec392a2d" autoplay loop muted playsinline width="400"></video>
 
@@ -85,6 +85,33 @@ legacy Electron `Peon Pet` dir is reused automatically if you're upgrading):
 provide falls back to the bundled orc. Precedence for the active character is
 `--character` > config > `orc`.
 
+## GitHub Copilot CLI
+
+Peon Pet can also react to local interactive Copilot CLI sessions. Install its
+user-level hooks explicitly:
+
+```bash
+peon-pet copilot install
+```
+
+This adds `peon-pet.json` under `~/.copilot/hooks/`, or
+`$COPILOT_HOME/hooks/` when `COPILOT_HOME` is set. It does not edit repository
+hooks or other Copilot settings. Start (or restart) Copilot CLI and keep Peon Pet
+running; if Copilot is sandboxed, its hook process may need permission to access
+Peon Pet's local socket. Peon Pet does not change Copilot's sandbox policy.
+
+Remove the integration with:
+
+```bash
+peon-pet copilot uninstall
+```
+
+The integration supports local Copilot CLI lifecycle events only; Copilot Cloud
+Agent and IDE-only events are not supported. Hook payloads are reduced to session
+metadata before forwarding: prompt text, tool arguments/results, agent responses,
+and error details are not sent to Peon Pet. If the pet is not running, hooks
+report the delivery issue but do not block or change Copilot's behavior.
+
 ## Animations
 
 | Claude Code event | Animation |
@@ -95,17 +122,27 @@ provide falls back to the bundled orc. Precedence for the active character is
 | Permission request / context compact | Alarmed |
 | Tool failure | Annoyed |
 
+| Copilot CLI event | Animation |
+|---|---|
+| Session start | Waking up |
+| Prompt submit | Typing |
+| Agent stop | Celebrate |
+| Permission request / context compact | Alarmed |
+| Tool failure | Annoyed |
+
 The orc stays in typing mode while any session is actively working (event within last 30 s). Returns to sleeping after 30 s of inactivity.
 
 ## Session dots
 
-Up to 10 glowing orbs appear above the orc — one per tracked Claude Code session:
+Up to 10 glowing orbs appear above the orc — one per tracked Claude Code or
+Copilot CLI session:
 
 - **Bright pulsing green** — active (event within last 30 s)
 - **Dim green** — idle (last event 30 s–2 min ago)
 
-Sessions are dropped automatically after 10 min of inactivity (the JSONL transcript
-model has no explicit "session end" — they decay).
+Claude Code sessions are dropped after 10 min of inactivity (their JSONL
+transcripts have no explicit session-end event); Copilot CLI sessions are removed
+when Copilot reports `sessionEnd`.
 
 Hover over a dot to see the project folder and status. Hover anywhere on the widget to see all active project names.
 
@@ -148,7 +185,9 @@ The pet reacts to Claude Code automatically: just use Claude Code and watch the 
 wake / type / celebrate. With `bun run dev` the terminal echoes each reaction, e.g.
 `→ orc: typing (UserPromptSubmit)`.
 
-Valid events: `SessionStart`, `Stop`, `UserPromptSubmit`, `PermissionRequest`, `PostToolUseFailure`, `PreCompact`
+Claude Code events: `SessionStart`, `Stop`, `UserPromptSubmit`, `PermissionRequest`,
+`PostToolUseFailure`, `PreCompact`. Copilot CLI events are installed separately
+with `peon-pet copilot install`.
 
 ## Sprite atlas
 

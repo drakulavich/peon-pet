@@ -1,7 +1,7 @@
 {
   "name": "@drakulavich/peon-pet",
   "version": "0.1.2",
-  "description": "A macOS desktop pet for Peon-Ping — an orc that reacts to your Claude Code events. Native Bun + AppKit (no Electron).",
+  "description": "A macOS desktop pet for Peon-Ping — an orc that reacts to Claude Code and GitHub Copilot CLI events. Native Bun + AppKit (no Electron).",
   "type": "module",
   "module": "src/main.ts",
   "bin": {
@@ -19,6 +19,8 @@
   },
   "keywords": [
     "claude-code",
+    "github-copilot",
+    "copilot-cli",
     "desktop-pet",
     "peon-ping",
     "macos",
