@@ -7,6 +7,8 @@ here first.
 | Term | Definition |
 |---|---|
 | **Session** | One Claude Code conversation, identified by a UUID and backed by a JSONL transcript under `~/.claude/projects/` (`src/app/jsonl-watcher.ts`, `src/app/session-tracker.ts`). |
+| **Copilot CLI session** | One local GitHub Copilot CLI conversation, identified by the session ID provided to its lifecycle hooks. |
+| **Copilot hook** | A locally configured GitHub Copilot CLI lifecycle callback that invokes a command with a JSON event payload. |
 | **Sub-agent** | A nested agent a Session spawns. *Foreground* = `agent_progress` records in the parent transcript; *background* = a `subagents/agent-*.jsonl` file (`src/app/sub-agent-manager.ts`). |
 | **JsonlWatcher** | The component that tails Session transcripts and reports which Sessions are Active (`src/app/jsonl-watcher.ts`). |
 | **Active** (session) | A Session reported by `JsonlWatcher.getActiveSessionIds()` (`src/app/jsonl-watcher.ts:99`); the heartbeat keeps active Sessions' timestamps fresh (`src/main.ts`). |
