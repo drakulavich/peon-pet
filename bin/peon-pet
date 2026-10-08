@@ -2,17 +2,38 @@
 // peon-pet launcher. Runs the Bun + AppKit entrypoint. Requires Bun on macOS
 // (Apple Silicon or Intel); the prebuilt universal native shim ships in the package.
 
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { dispatchCopilotHook, MAX_COPILOT_HOOK_INPUT_BYTES } from "../src/app/copilot-cli.ts";
 import { installCopilotHooks, uninstallCopilotHooks } from "../src/app/copilot-hooks.ts";
+import { installPiExtension, uninstallPiExtension } from "../src/app/pi-extension-installer.ts";
 
 const pkgRoot = join(import.meta.dir, "..");
 const dylib = join(pkgRoot, "native", "libpeonshell.dylib");
 const args = process.argv.slice(2);
 
-if (args[0] === "copilot") {
+if (args[0] === "pi") {
+  const environment = {
+    home: homedir(),
+    piAgentDir: process.env.PI_CODING_AGENT_DIR,
+  };
+  try {
+    if (args[1] === "install" && args.length === 2) {
+      const extensionSource = readFileSync(join(pkgRoot, "src", "pi-extension.ts"), "utf8");
+      const result = installPiExtension({ ...environment, extensionSource });
+      console.log(result === "installed" ? "Pi Agent extension installed." : "Pi Agent extension already installed.");
+    } else if (args[1] === "uninstall" && args.length === 2) {
+      const removed = uninstallPiExtension(environment);
+      console.log(removed ? "Pi Agent extension removed." : "Pi Agent extension was not installed.");
+    } else {
+      throw new Error("Usage: peon-pet pi <install|uninstall>");
+    }
+  } catch (error) {
+    console.error(`peon-pet: ${error instanceof Error ? error.message : String(error)}`);
+    process.exitCode = 1;
+  }
+} else if (args[0] === "copilot") {
   const environment = {
     home: homedir(),
     copilotHome: process.env.COPILOT_HOME,

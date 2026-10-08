@@ -56,9 +56,9 @@ which maps onto OpenSpec's Requirement + Scenario = Gherkin. A requirement is no
 
 Specs name these concrete roles instead of a generic "user":
 
-- **Vlad, the Claude Code power user** — runs long, multi-Session Claude Code work
-  with Sub-agents and glances at the orc for session dots and mini-pets. Cares about
-  accurate Active-session and Sub-agent display and correct Hot/Warm states.
+- **Vlad, the coding-agent power user** — runs long sessions with Claude Code,
+  Copilot CLI, and Pi Agent and glances at the orc for Session dots and Mini-pets.
+  Cares about accurate Active-session display and correct Hot/Warm states.
 - **Mira, the skin author** — installs or builds a custom Character (sprite atlas,
   borders, bg, dock-icon). Cares about asset resolution and the character-selection
   contract.

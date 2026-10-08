@@ -1,6 +1,6 @@
 # peon-pet
 
-A macOS desktop pet for [Peon-Ping](https://peonping.com) — an orc that reacts to Claude Code and GitHub Copilot CLI events with sprite animations. Built on **Bun + AppKit + Three.js** (no Electron — a native `NSPanel` driven via `bun:ffi`, rendering the Three.js scene in system WebKit).
+A macOS desktop pet for [Peon-Ping](https://peonping.com) — an orc that reacts to Claude Code, GitHub Copilot CLI, and Pi Agent events with sprite animations. Built on **Bun + AppKit + Three.js** (no Electron — a native `NSPanel` driven via `bun:ffi`, rendering the Three.js scene in system WebKit).
 
 <video src="https://github.com/user-attachments/assets/7fd9a2cb-d227-49ad-8ccc-7953ec392a2d" autoplay loop muted playsinline width="400"></video>
 
@@ -112,6 +112,32 @@ metadata before forwarding: prompt text, tool arguments/results, agent responses
 and error details are not sent to Peon Pet. If the pet is not running, hooks
 report the delivery issue but do not block or change Copilot's behavior.
 
+## Pi Agent
+
+Peon Pet can react to local Pi Agent sessions through a user-level extension.
+Install it explicitly:
+
+```bash
+peon-pet pi install
+```
+
+This installs `peon-pet.ts` under `~/.pi/agent/extensions/`, or under
+`$PI_CODING_AGENT_DIR/extensions/` when `PI_CODING_AGENT_DIR` is set. The
+extension is shared by Pi launchers that use the same Pi Agent directory, so
+separate cmux shims do not need separate setup. Restart Pi after installing.
+
+Pi session start wakes the pet, a turn start triggers typing, a settled agent
+celebrates, and session shutdown removes its Session dot. The extension sends
+only a namespaced session ID, event, working directory, and timestamp; prompts,
+tool arguments/results, and responses are not forwarded. If Peon Pet is not
+running, Pi continues normally.
+
+Remove only Peon Pet's extension with:
+
+```bash
+peon-pet pi uninstall
+```
+
 ## Animations
 
 | Claude Code event | Animation |
@@ -130,19 +156,25 @@ report the delivery issue but do not block or change Copilot's behavior.
 | Permission request / context compact | Alarmed |
 | Tool failure | Annoyed |
 
+| Pi Agent event | Animation |
+|---|---|
+| Session start | Waking up |
+| Turn start | Typing |
+| Agent settled | Celebrate |
+
 The orc stays in typing mode while any session is actively working (event within last 30 s). Returns to sleeping after 30 s of inactivity.
 
 ## Session dots
 
-Up to 10 glowing orbs appear above the orc — one per tracked Claude Code or
-Copilot CLI session:
+Up to 10 glowing orbs appear above the orc — one per tracked Claude Code,
+Copilot CLI, or Pi Agent session:
 
 - **Bright pulsing green** — active (event within last 30 s)
 - **Dim green** — idle (last event 30 s–2 min ago)
 
 Claude Code sessions are dropped after 10 min of inactivity (their JSONL
-transcripts have no explicit session-end event); Copilot CLI sessions are removed
-when Copilot reports `sessionEnd`.
+transcripts have no explicit session-end event); Copilot CLI and Pi Agent
+sessions are removed when their respective session-end events arrive.
 
 Hover over a dot to see the project folder and status. Hover anywhere on the widget to see all active project names.
 
@@ -174,7 +206,7 @@ The only file that touches `bun:ffi` is `src/shell/appkit.ts`. Everything above 
 
 ```bash
 bun run dev    # builds the shim, runs with native diagnostics (--dev)
-bun test       # 182 tests, headless (no window opened)
+bun test       # 223 tests, headless (no window opened)
 bun run build:native   # rebuild native/libpeonshell.dylib after editing the shim
 ```
 
@@ -187,7 +219,7 @@ wake / type / celebrate. With `bun run dev` the terminal echoes each reaction, e
 
 Claude Code events: `SessionStart`, `Stop`, `UserPromptSubmit`, `PermissionRequest`,
 `PostToolUseFailure`, `PreCompact`. Copilot CLI events are installed separately
-with `peon-pet copilot install`.
+with `peon-pet copilot install`; Pi Agent events use `peon-pet pi install`.
 
 ## Sprite atlas
 

@@ -59,6 +59,22 @@ describe("Copilot event socket", () => {
     ]);
   });
 
+  test("accepts validated Pi lifecycle events over the shared socket", async () => {
+    const received: unknown[] = [];
+    const server = await listenForCopilotEvents(socketPath, (event) => received.push(event));
+    closeServer = () => server.close();
+    const event = {
+      kind: "pi-session",
+      sessionId: "91a11a00-91a1-8abc-8abc-123456789abc",
+      event: "SessionStart",
+      cwd: "/Users/vlad/project",
+      timestamp: 1_800_000_000_000,
+    };
+
+    expect(await sendRaw(`${JSON.stringify(event)}\n`)).toBe('{"ok":true}');
+    expect(received).toEqual([event]);
+  });
+
   test("rejects malformed IPC JSON without delivering an event", async () => {
     const received: unknown[] = [];
     const server = await listenForCopilotEvents(socketPath, (event) => received.push(event));

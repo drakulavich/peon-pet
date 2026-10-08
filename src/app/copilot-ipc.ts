@@ -2,8 +2,10 @@ import { chmodSync, existsSync, lstatSync, mkdirSync, unlinkSync } from "node:fs
 import { dirname, join } from "node:path";
 import { configDir } from "./config.ts";
 import { validateCopilotPetEvent, type CopilotPetEvent } from "./copilot-events.ts";
+import { validatePiPetEvent, type PiPetEvent } from "./pi-events.ts";
 
 export const MAX_COPILOT_MESSAGE_BYTES = 16 * 1024;
+export type PeonPetEvent = CopilotPetEvent | PiPetEvent;
 const FRAME_TIMEOUT_MS = 2000;
 const ACK = '{"ok":true}\n';
 const NACK = '{"ok":false}\n';
@@ -12,7 +14,7 @@ export function copilotSocketPath(): string {
   return join(configDir(), "copilot-ipc", "events.sock");
 }
 
-export async function sendCopilotEvent(socketPath: string, event: CopilotPetEvent): Promise<boolean> {
+export async function sendCopilotEvent(socketPath: string, event: PeonPetEvent): Promise<boolean> {
   return await new Promise((resolve) => {
     let settled = false;
     const finish = (ok: boolean) => {
@@ -47,7 +49,7 @@ export async function sendCopilotEvent(socketPath: string, event: CopilotPetEven
 
 export async function listenForCopilotEvents(
   socketPath: string,
-  onEvent: (event: CopilotPetEvent) => void,
+  onEvent: (event: PeonPetEvent) => void,
 ): Promise<{ close(): void }> {
   const directory = dirname(socketPath);
   mkdirSync(directory, { recursive: true, mode: 0o700 });
@@ -129,7 +131,7 @@ export async function listenForCopilotEvents(
           respond(socket, NACK);
           return;
         }
-        const event = validateCopilotPetEvent(raw);
+        const event = validateCopilotPetEvent(raw) ?? validatePiPetEvent(raw);
         if (!event) {
           respond(socket, NACK);
           return;

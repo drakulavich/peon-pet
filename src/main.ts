@@ -1,6 +1,6 @@
 // peon-pet entrypoint (Bun + AppKit). Composition root: wires the AppKit shell,
 // the asset resolver, event sources, and session tracker so the orc reacts to
-// Claude Code and Copilot CLI events.
+// Claude Code, Copilot CLI, and Pi Agent events.
 //
 //   bun run build:native && bun run src/main.ts [--character <name>] [--corner <c>]
 
@@ -23,8 +23,10 @@ import { WindowInteraction } from "./app/window-interaction.ts";
 import { SubAgentManager, SUB_AGENT_SIZE } from "./app/sub-agent-manager.ts";
 import { acquireSingleInstance } from "./app/single-instance.ts";
 import { applyCopilotSessionEvent, shouldApplyCopilotEvent } from "./app/copilot-session.ts";
-import { copilotSocketPath, listenForCopilotEvents } from "./app/copilot-ipc.ts";
+import { copilotSocketPath, listenForCopilotEvents, type PeonPetEvent } from "./app/copilot-ipc.ts";
 import type { CopilotPetEvent } from "./app/copilot-events.ts";
+import { applyPiSessionEvent, shouldApplyPiEvent } from "./app/pi-session.ts";
+import type { PiPetEvent } from "./app/pi-events.ts";
 import type { WindowHandle } from "./shell/types.ts";
 
 // Single-instance guard: bail if another peon-pet is already running.
@@ -153,6 +155,8 @@ const copilotActiveSessions = new Set<string>();
 const copilotActiveTurns = new Set<string>();
 const copilotSubagents = new Map<string, Set<string>>();
 const copilotEndedSessions = new Map<string, number>();
+const piActiveSessions = new Set<string>();
+const piEndedSessions = new Map<string, number>();
 
 function sendSessionUpdate(now: number): void {
   const sessions = buildSessionStates(tracker.entries(), now, HOT_MS, WARM_MS, MAX_DOTS).map((s) => {
@@ -269,9 +273,33 @@ function handleCopilotEvent(event: CopilotPetEvent): void {
   sendSessionUpdate(now);
 }
 
+function handlePiEvent(event: PiPetEvent): void {
+  if (!shouldApplyPiEvent(event, piEndedSessions)) return;
+  const now = Date.now();
+  const result = applyPiSessionEvent(event, tracker, sessionCwds);
+  if (result === "ended") {
+    piActiveSessions.delete(event.sessionId);
+  } else if (event.event === "UserPromptSubmit") {
+    piActiveSessions.add(event.sessionId);
+  } else if (event.event === "Stop") {
+    piActiveSessions.delete(event.sessionId);
+  }
+
+  pruneTrackedSessions(now);
+  sendSessionUpdate(now);
+  const anim = EVENT_TO_ANIM[event.event];
+  if (anim) {
+    emit("peon-event", { anim, event: event.event });
+    if (DEV) console.log(`→ orc: ${anim} (${event.event}) — ${tracker.entries().length} session(s)`);
+  }
+}
+
 let copilotEventServer: { close(): void } | null = null;
 try {
-  copilotEventServer = await listenForCopilotEvents(copilotSocketPath(), handleCopilotEvent);
+  copilotEventServer = await listenForCopilotEvents(copilotSocketPath(), (event: PeonPetEvent) => {
+    if (event.kind === "pi-session") handlePiEvent(event);
+    else handleCopilotEvent(event);
+  });
 } catch (error) {
   console.error("peon-pet: Copilot CLI event listener could not start:", error);
 }
@@ -283,6 +311,7 @@ const heartbeat = setInterval(() => {
   if (tracker.entries().length === 0) return;
   for (const id of watcher.getActiveSessionIds()) tracker.update(id, now);
   for (const id of copilotActiveSessions) tracker.update(id, now);
+  for (const id of piActiveSessions) tracker.update(id, now);
   sendSessionUpdate(now);
 }, 5000);
 

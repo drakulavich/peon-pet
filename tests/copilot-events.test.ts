@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { copilotSessionId, parseCopilotHookEvent } from "../src/app/copilot-events.ts";
+import {
+  copilotSessionId,
+  parseCopilotHookEvent,
+  validateCopilotPetEvent,
+} from "../src/app/copilot-events.ts";
 
 const base = {
   sessionId: "copilot-session-123",
@@ -89,5 +93,17 @@ describe("parseCopilotHookEvent", () => {
     expect(first).toBe(copilotSessionId("session-1"));
     expect(first).toMatch(/^c0a17e71-c0a1-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
     expect(first).not.toBe(copilotSessionId("session-2"));
+  });
+
+  test("rejects Pi lifecycle events in its independent identifier namespace", () => {
+    const event = {
+      kind: "pi-session",
+      sessionId: "91a11a00-91a1-8abc-8abc-123456789abc",
+      event: "UserPromptSubmit",
+      cwd: "/Users/vlad/project",
+      timestamp: 1_800_000_000_000,
+    };
+
+    expect(validateCopilotPetEvent(event)).toBeNull();
   });
 });

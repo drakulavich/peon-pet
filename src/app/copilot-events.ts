@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-type SessionEventName =
+export type SessionEventName =
   | "SessionStart"
   | "UserPromptSubmit"
   | "Stop"
