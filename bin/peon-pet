@@ -7,6 +7,12 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { dispatchCopilotHook, MAX_COPILOT_HOOK_INPUT_BYTES } from "../src/app/copilot-cli.ts";
 import { installCopilotHooks, uninstallCopilotHooks } from "../src/app/copilot-hooks.ts";
+import {
+  dispatchAntigravityHook,
+  installAntigravityHooks,
+  MAX_ANTIGRAVITY_HOOK_INPUT_BYTES,
+  uninstallAntigravityHooks,
+} from "../src/app/antigravity.ts";
 import { installPiExtension, uninstallPiExtension } from "../src/app/pi-extension-installer.ts";
 
 const pkgRoot = join(import.meta.dir, "..");
@@ -55,6 +61,37 @@ if (args[0] === "pi") {
     console.error(`peon-pet: ${error instanceof Error ? error.message : String(error)}`);
     process.exitCode = 1;
   }
+} else if (args[0] === "antigravity") {
+  try {
+    if (args[1] === "install" && args.length === 2) {
+      const result = installAntigravityHooks({
+        home: homedir(),
+        executablePath: join(import.meta.dir, "peon-pet"),
+      });
+      console.log(result === "installed" ? "Antigravity hooks installed." : "Antigravity hooks already installed.");
+    } else if (args[1] === "uninstall" && args.length === 2) {
+      const removed = uninstallAntigravityHooks({ home: homedir() });
+      console.log(removed ? "Antigravity hooks removed." : "Antigravity hooks were not installed.");
+    } else {
+      throw new Error("Usage: peon-pet antigravity <install|uninstall>");
+    }
+  } catch (error) {
+    console.error(`peon-pet: ${error instanceof Error ? error.message : String(error)}`);
+    process.exitCode = 1;
+  }
+} else if (args[0] === "--antigravity-hook") {
+  // Best-effort and silent: never block or fail the host tool.
+  try {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    for await (const chunk of Bun.stdin.stream()) {
+      size += chunk.byteLength;
+      if (size <= MAX_ANTIGRAVITY_HOOK_INPUT_BYTES) chunks.push(Buffer.from(chunk));
+    }
+    if (size <= MAX_ANTIGRAVITY_HOOK_INPUT_BYTES) {
+      await dispatchAntigravityHook(args[1] ?? "", Buffer.concat(chunks).toString("utf8"));
+    }
+  } catch {}
 } else if (args[0] === "--copilot-hook") {
   const hookName = args[1] ?? "";
   let oversized = false;

@@ -16,6 +16,8 @@ export type CopilotPetEvent =
       event: SessionEventName;
       cwd: string | null;
       timestamp: number;
+      conversationId?: string | null;
+      transcriptPath?: string | null;
     }
   | {
       kind: "subagent";
@@ -43,8 +45,8 @@ const MAX_TRANSCRIPT_PATH_LENGTH = 4096;
 const SAFE_SESSION_ID = /^[A-Za-z0-9._:-]+$/;
 const COPILOT_SESSION_NAMESPACE = /^c0a17e71-c0a1-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export function copilotSessionId(sessionId: string): string {
-  const hash = createHash("sha256").update(`peon-pet:copilot-session:${sessionId}`).digest("hex");
+export function copilotSessionId(sessionId: string, source = "copilot-session"): string {
+  const hash = createHash("sha256").update(`peon-pet:${source}:${sessionId}`).digest("hex");
   const variant = ((Number.parseInt(hash[16], 16) & 0x3) | 0x8).toString(16);
   const hex = `c0a17e71c0a18${hash.slice(13, 16)}${variant}${hash.slice(17, 32)}`;
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
@@ -139,12 +141,26 @@ export function validateCopilotPetEvent(value: unknown): CopilotPetEvent | null 
     ) {
       return null;
     }
+    const conversationId =
+      typeof value.conversationId === "string" &&
+      value.conversationId.length > 0 &&
+      value.conversationId.length <= MAX_SESSION_ID_LENGTH
+        ? value.conversationId
+        : null;
+    const transcriptPath =
+      typeof value.transcriptPath === "string" &&
+      value.transcriptPath.length > 0 &&
+      value.transcriptPath.length <= MAX_TRANSCRIPT_PATH_LENGTH
+        ? value.transcriptPath
+        : null;
     return {
       kind: "session",
       sessionId: value.sessionId,
       event: value.event as SessionEventName,
       cwd: value.cwd,
       timestamp: value.timestamp,
+      ...(conversationId ? { conversationId } : {}),
+      ...(transcriptPath ? { transcriptPath } : {}),
     };
   }
 

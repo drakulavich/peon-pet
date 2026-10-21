@@ -23,6 +23,7 @@ import { WindowInteraction } from "./app/window-interaction.ts";
 import { SubAgentManager, SUB_AGENT_SIZE } from "./app/sub-agent-manager.ts";
 import { acquireSingleInstance } from "./app/single-instance.ts";
 import { applyCopilotSessionEvent, shouldApplyCopilotEvent } from "./app/copilot-session.ts";
+import { findAntigravityTranscript, isAntigravityTranscriptActive } from "./app/antigravity.ts";
 import { copilotSocketPath, listenForCopilotEvents, type PeonPetEvent } from "./app/copilot-ipc.ts";
 import type { CopilotPetEvent } from "./app/copilot-events.ts";
 import { applyPiSessionEvent, shouldApplyPiEvent } from "./app/pi-session.ts";
@@ -152,6 +153,7 @@ function emit(channel: string, data: unknown): void {
 const tracker = createSessionTracker();
 const sessionCwds = new Map<string, string>();
 const copilotActiveSessions = new Set<string>();
+const sessionTranscripts = new Map<string, string>();
 const copilotActiveTurns = new Set<string>();
 const copilotSubagents = new Map<string, Set<string>>();
 const copilotEndedSessions = new Map<string, number>();
@@ -225,10 +227,17 @@ function handleCopilotEvent(event: CopilotPetEvent): void {
   if (!shouldApplyCopilotEvent(event, copilotEndedSessions)) return;
   const now = Date.now();
   if (event.kind === "session") {
+    if (event.transcriptPath) {
+      sessionTranscripts.set(event.sessionId, event.transcriptPath);
+    } else if (event.conversationId) {
+      const resolved = findAntigravityTranscript(event.conversationId);
+      if (resolved) sessionTranscripts.set(event.sessionId, resolved);
+    }
     const result = applyCopilotSessionEvent(event, tracker, sessionCwds);
     if (result === "ended") {
       copilotActiveSessions.delete(event.sessionId);
       copilotActiveTurns.delete(event.sessionId);
+      sessionTranscripts.delete(event.sessionId);
       for (const parentToolId of copilotSubagents.get(event.sessionId) ?? []) {
         subAgents.destroy(parentToolId);
       }
@@ -238,6 +247,7 @@ function handleCopilotEvent(event: CopilotPetEvent): void {
       copilotActiveSessions.add(event.sessionId);
     } else if (event.event === "Stop") {
       copilotActiveTurns.delete(event.sessionId);
+      sessionTranscripts.delete(event.sessionId);
       if ((copilotSubagents.get(event.sessionId)?.size ?? 0) === 0) {
         copilotActiveSessions.delete(event.sessionId);
       }
@@ -304,13 +314,26 @@ try {
   console.error("peon-pet: Copilot CLI event listener could not start:", error);
 }
 
-// Heartbeat: keep sessions with pending tools hot, and sweep stale sub-agents.
+// Heartbeat: keep sessions with pending tools hot, sweep stale sub-agents,
+// and verify active sessions against ground truth (transcripts).
 const heartbeat = setInterval(() => {
   const now = Date.now();
   subAgents.sweepExpired();
   if (tracker.entries().length === 0) return;
   for (const id of watcher.getActiveSessionIds()) tracker.update(id, now);
-  for (const id of copilotActiveSessions) tracker.update(id, now);
+  for (const id of [...copilotActiveSessions]) {
+    const transcriptPath = sessionTranscripts.get(id);
+    if (transcriptPath) {
+      if (!isAntigravityTranscriptActive(transcriptPath)) {
+        copilotActiveSessions.delete(id);
+        copilotActiveTurns.delete(id);
+        sessionTranscripts.delete(id);
+        emit("peon-event", { anim: "celebrate", event: "Stop" });
+        continue;
+      }
+    }
+    tracker.update(id, now);
+  }
   for (const id of piActiveSessions) tracker.update(id, now);
   sendSessionUpdate(now);
 }, 5000);

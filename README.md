@@ -85,6 +85,19 @@ legacy Electron `Peon Pet` dir is reused automatically if you're upgrading):
 provide falls back to the bundled orc. Precedence for the active character is
 `--character` > config > `orc`.
 
+## Antigravity
+
+Peon Pet can react to Antigravity agent runs through its hooks. Install with:
+
+```bash
+peon-pet antigravity install
+```
+
+This adds a `peon-pet` entry to `~/.gemini/config/hooks.json` (`PreInvocation`
+and `Stop` only); other hook entries are left untouched. Restart Antigravity and
+keep Peon Pet running. Only the conversation ID, event, and working directory are
+sent, over the local socket. Remove it with `peon-pet antigravity uninstall`.
+
 ## GitHub Copilot CLI
 
 Peon Pet can also react to local interactive Copilot CLI sessions. Install its
