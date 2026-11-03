@@ -158,6 +158,14 @@ static PeonSchemeHandler *gSchemeHandler = nil; // keep alive
     gDockCb(((NSString *)item.representedObject).UTF8String);
   }
 }
+
+// Dock icon clicked: notify Bun to reset slots
+- (BOOL)applicationShouldHandleReopen:(NSApplication *)sender hasVisibleWindows:(BOOL)flag {
+  if (gDockCb) {
+    gDockCb("reopen");
+  }
+  return YES;
+}
 @end
 
 static PeonDelegate *gDelegate = nil; // keep alive
@@ -183,6 +191,7 @@ static NSString *const kPeonBridgeJS =
     @"onSessionUpdate:function(cb){H.session=cb;},"
     @"onConfig:function(cb){H.config=cb;},"
     @"startDrag:function(){post({type:'drag-start'});},"
+    @"resetSlots:function(){post({type:'reset-slots'});},"
     @"stopDrag:function(){post({type:'drag-stop'});}};"
     @"window.__peonEmit=function(channel,data){"
     @"if(channel==='peon-event'&&H.event)H.event(data);"

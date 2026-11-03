@@ -129,6 +129,7 @@ if (dockIcon) shell.setDockIcon(dockIcon.filePath);
 
 function buildDockMenu(): void {
   shell.setDockMenu([
+    { id: "reset", label: "Reset Slots" },
     { id: "toggle", label: petVisible ? "Hide Pet" : "Show Pet" },
     { separator: true },
     { id: "quit", label: "Quit" },
@@ -137,6 +138,7 @@ function buildDockMenu(): void {
 buildDockMenu();
 shell.onDockMenuClick((id) => {
   if (id === "quit") return shutdown();
+  if (id === "reset" || id === "reopen") return resetSlots();
   if (id === "toggle") {
     petVisible = !petVisible;
     for (const w of [win, ...subAgents.liveWindows()]) petVisible ? w.show() : w.hide();
@@ -151,6 +153,31 @@ function emit(channel: string, data: unknown): void {
 
 // ── Shared session display state ──────────────────────────────────────────────
 const tracker = createSessionTracker();
+
+function resetSlots(): void {
+  const allIds = tracker.entries().map(([id]) => id);
+  for (const id of allIds) {
+    tracker.remove(id);
+  }
+  sessionCwds.clear();
+  copilotActiveSessions.clear();
+  sessionTranscripts.clear();
+  copilotActiveTurns.clear();
+  copilotSubagents.clear();
+  copilotEndedSessions.clear();
+  piActiveSessions.clear();
+  piEndedSessions.clear();
+  subAgents.destroyAll();
+  sendSessionUpdate(Date.now());
+  emit("peon-event", { anim: "sleeping", event: "Stop" });
+  if (DEV) console.log("→ slots reset: all sessions cleared");
+}
+
+win.onMessage((msg) => {
+  if (msg.type === "reset-slots") {
+    resetSlots();
+  }
+});
 const sessionCwds = new Map<string, string>();
 const copilotActiveSessions = new Set<string>();
 const sessionTranscripts = new Map<string, string>();

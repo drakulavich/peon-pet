@@ -33,9 +33,9 @@ export type DockMenuItem = { id: string; label: string } | { separator: true };
  * the boundary is typed end to end. Unknown shapes are rejected by
  * {@link parseShellMessage}.
  */
-export type ShellMessage = { type: "drag-start" } | { type: "drag-stop" };
+export type ShellMessage = { type: "drag-start" } | { type: "drag-stop" } | { type: "reset-slots" };
 
-const SHELL_MESSAGE_TYPES = new Set(["drag-start", "drag-stop"]);
+const SHELL_MESSAGE_TYPES = new Set(["drag-start", "drag-stop", "reset-slots"]);
 
 /** Validate an untrusted inbound payload into a ShellMessage, or null. */
 export function parseShellMessage(raw: unknown): ShellMessage | null {

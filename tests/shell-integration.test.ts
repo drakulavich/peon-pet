@@ -17,6 +17,7 @@ describe("parseShellMessage", () => {
   test("accepts known message types", () => {
     expect(parseShellMessage({ type: "drag-start" })).toEqual({ type: "drag-start" });
     expect(parseShellMessage({ type: "drag-stop" })).toEqual({ type: "drag-stop" });
+    expect(parseShellMessage({ type: "reset-slots" })).toEqual({ type: "reset-slots" });
   });
 
   test("rejects unknown / malformed payloads", () => {

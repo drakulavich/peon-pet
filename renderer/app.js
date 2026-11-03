@@ -267,12 +267,18 @@ function hitTestDots(px, py) {
   return -1;
 }
 
-// --- Drag handling ---
+// --- Drag handling & Click handling ---
 let dragging = false;
+let pointerDownPos = null;
+let pointerDownTime = 0;
+const CLICK_THRESHOLD_PX = 4;
+const CLICK_THRESHOLD_MS = 400;
 
 canvas.addEventListener('pointerdown', (e) => {
   if (e.button !== 0) return;  // left-click only
   dragging = true;
+  pointerDownPos = { x: e.clientX, y: e.clientY };
+  pointerDownTime = performance.now();
   tooltip.style.display = 'none';
   canvas.setPointerCapture(e.pointerId);
   window.peonBridge.startDrag();
@@ -282,6 +288,19 @@ canvas.addEventListener('pointerup', (e) => {
   if (e.button !== 0 || !dragging) return;
   dragging = false;
   window.peonBridge.stopDrag();
+
+  if (pointerDownPos) {
+    const dx = e.clientX - pointerDownPos.x;
+    const dy = e.clientY - pointerDownPos.y;
+    const dt = performance.now() - pointerDownTime;
+    if (dx * dx + dy * dy <= CLICK_THRESHOLD_PX * CLICK_THRESHOLD_PX && dt <= CLICK_THRESHOLD_MS) {
+      // It's a click on the sprite! Reset slots & put pet to sleep
+      if (window.peonBridge.resetSlots) {
+        window.peonBridge.resetSlots();
+      }
+    }
+    pointerDownPos = null;
+  }
 });
 
 canvas.addEventListener('lostpointercapture', () => {
