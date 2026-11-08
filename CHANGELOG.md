@@ -1,5 +1,37 @@
 # Changelog
 
+## [Unreleased] - Native Bun + AppKit (drop Electron)
+
+Replaces the Electron shell with a native Bun runtime. The pet is now a pure Bun
+process that drives an AppKit `NSPanel` via `bun:ffi` and renders the **unchanged**
+Three.js scene in system WebKit — no Chromium, no Node. See the OpenSpec change
+`openspec/changes/drop-electron-native-bun-shell/`.
+
+### Changed
+
+- **Runtime:** Electron 40 → **Bun** (native TypeScript, no build step).
+- **Window shell:** Electron `BrowserWindow` → AppKit `NSPanel` via a thin C shim
+  (`native/peonshell.m`) loaded with `bun:ffi`. Same traits: transparent,
+  borderless, floating over all spaces, click-through with hover capture.
+- **Rendering:** Chromium → system **WKWebView**; the `renderer/` is byte-for-byte
+  unchanged.
+- **Assets:** `peon-asset://` is now served by a `WKURLSchemeHandler` backed by a
+  pure, tested resolver (with CORS for cross-origin textures).
+- **IPC:** Electron preload/ipc → injected `window.peonBridge` shim over
+  `WKScriptMessageHandler` + `evaluateJavaScript`.
+- **Tests:** Jest → `bun test` (138 tests, headless via an in-memory shell).
+- **Run loop:** cooperative pump keeps Bun's loop and Cocoa's loop alive together.
+
+### Removed
+
+- `main.js`, `preload.js`, `lib/*.js`, the `boolean` shim/override, and the
+  Electron dependency. `npm start` → `bun run start`.
+
+### Not yet ported (tracked in the OpenSpec change)
+
+- Sub-agent mini-windows, dock Hide/Show/Quit menu, drag-to-move, single-instance
+  lock.
+
 ## [1.0.0-alpha] - 2026-02-18
 
 First working release of peon-pet — a desktop pet for [Peon-Ping](https://peonping.com).

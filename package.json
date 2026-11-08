@@ -1,30 +1,71 @@
 {
-  "name": "peon-pet",
-  "productName": "Peon Pet",
-  "version": "1.0.0-alpha.1",
-  "description": "Desktop pet for Peon-Ping — an orc that reacts to peon-ping events",
-  "main": "main.js",
+  "name": "@drakulavich/peon-pet",
+  "version": "0.1.2",
+  "description": "A macOS desktop pet for Peon-Ping — an orc that reacts to Claude Code, GitHub Copilot CLI, and Pi Agent events. Native Bun + AppKit (no Electron).",
+  "type": "module",
+  "module": "src/main.ts",
+  "bin": {
+    "peon-pet": "bin/peon-pet"
+  },
+  "license": "MIT",
+  "author": "Anton Yakutovich (drakulavich)",
+  "homepage": "https://github.com/drakulavich/peon-pet#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/drakulavich/peon-pet.git"
+  },
+  "bugs": {
+    "url": "https://github.com/drakulavich/peon-pet/issues"
+  },
+  "keywords": [
+    "claude-code",
+    "github-copilot",
+    "copilot-cli",
+    "pi-agent",
+    "desktop-pet",
+    "peon-ping",
+    "macos",
+    "bun",
+    "appkit",
+    "orc"
+  ],
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "arm64",
+    "x64"
+  ],
+  "engines": {
+    "bun": ">=1.3.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "!src/spike.ts",
+    "!src/demo-orc.ts",
+    "renderer/",
+    "native/peonshell.m",
+    "native/libpeonshell.dylib",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
-    "start": "electron .",
-    "dev": "electron . --dev",
-    "test": "jest",
-    "test:watch": "jest --watch"
-  },
-  "jest": {
-    "testEnvironment": "node",
-    "testMatch": [
-      "**/tests/**/*.test.js"
-    ]
-  },
-  "dependencies": {
-    "three": "^0.183.0"
+    "start": "bun run build:native && bun run src/main.ts",
+    "dev": "bun run build:native && bun run src/main.ts --dev",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "build:native": "clang -arch arm64 -arch x86_64 -framework Cocoa -framework WebKit -dynamiclib -fobjc-arc -o native/libpeonshell.dylib native/peonshell.m",
+    "vendor:three": "bun run scripts/vendor-three.ts",
+    "prepack": "bun run build:native && bun run vendor:three",
+    "spike": "bun run src/spike.ts",
+    "demo": "bun run src/demo-orc.ts"
   },
   "devDependencies": {
-    "canvas": "^3.2.1",
-    "electron": "^40.4.1",
-    "jest": "^29.7.0"
-  },
-  "overrides": {
-    "boolean": "file:./patches/boolean-shim"
+    "@types/bun": "^1.3.14",
+    "three": "^0.183.0"
   }
 }

@@ -1,0 +1,132 @@
+name: "📦 npm Publish"
+
+# Fires on a pushed `v*` tag (the manual gate — you cut the tag when ready).
+# A push event runs the workflow file FROM THE PUSHED TAG'S OWN COMMIT, so this
+# works on any branch (e.g. forked-master) without the workflow needing to live
+# on the repo's default branch — unlike `release`/`workflow_dispatch`, which
+# always read the default branch's copy. Stable tags publish to npm's `latest`
+# dist-tag; SemVer prereleases (vX.Y.Z-beta.N) publish to `beta` so
+# `bunx @drakulavich/peon-pet@latest` users do not get unstable builds.
+#
+# Runs on macOS (not ubuntu like kesha-voice-kit) because `npm publish` triggers
+# this package's `prepack`, which compiles native/libpeonshell.dylib via clang with
+# `-framework Cocoa -framework WebKit` — macOS-only. macos-14 (Apple Silicon) can
+# cross-compile the x86_64 slice from the SDK, producing the universal2 tarball.
+on:
+  push:
+    tags:
+      - "v*"
+  # Manual fallback. NOTE: workflow_dispatch is only usable once this file is on
+  # the repo's default branch (GitHub reads dispatchable workflows from there).
+  # The `push: tags` trigger above is the path that works from forked-master.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to publish (must already exist in the repo)"
+        required: true
+
+# id-token: write does double duty here: it authenticates the publish via npm
+# Trusted Publishing (OIDC — no NPM_TOKEN secret) AND signs the provenance
+# attestation. Both are verified by npm against GitHub's OIDC provider.
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: macos-14
+    steps:
+      # Resolve tag through env vars, never direct ${{ }} interpolation in run:,
+      # to avoid shell injection from a crafted tag while id-token: write is held.
+      # On a tag push, github.ref_name is the tag (e.g. v0.1.1); on a manual
+      # dispatch it is the user-supplied input.
+      - name: Resolve tag
+        id: tag
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "tag=$INPUT_TAG" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=$REF_NAME" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout at tag
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.13"
+
+      # registry-url points npm at npmjs.org and writes the .npmrc registry line.
+      # No auth token is configured — authentication comes from the OIDC id-token
+      # via Trusted Publishing (see the npm upgrade step below).
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
+      # Trusted Publishing (OIDC) requires npm >= 11.5.1; Node 22 bundles npm 10.x,
+      # which would fall back to token auth and fail. Upgrade to a version that
+      # performs the OIDC token exchange.
+      - name: Upgrade npm for Trusted Publishing (OIDC)
+        run: |
+          npm install -g npm@latest
+          npm --version
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # Refuse to publish if package.json#version does not match the release tag.
+      - name: Verify package.json version matches tag
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          expected="${TAG#v}"
+          actual=$(node -p "require('./package.json').version")
+          if [ "$expected" != "$actual" ]; then
+            echo "::error::Tag $TAG implies version $expected but package.json says $actual" >&2
+            exit 1
+          fi
+          echo "package.json version $actual matches tag $TAG — OK"
+
+      # Idempotent guard: skip publish (no-op) if this version is already on npm.
+      - name: Check npm registry for prior publish
+        id: registry
+        run: |
+          name=$(node -p "require('./package.json').name")
+          version=$(node -p "require('./package.json').version")
+          if npm view "$name@$version" version >/dev/null 2>&1; then
+            echo "already_published=true" >> "$GITHUB_OUTPUT"
+            echo "$name@$version already on npm — publish step will be skipped."
+          else
+            echo "already_published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Resolve npm dist-tag
+        id: dist_tag
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [[ "$version" == *-* ]]; then
+            echo "tag=beta" >> "$GITHUB_OUTPUT"
+            echo "$version is a prerelease — dist-tag beta."
+          else
+            echo "tag=latest" >> "$GITHUB_OUTPUT"
+            echo "$version is stable — dist-tag latest."
+          fi
+
+      # npm publish runs prepack (build:native + vendor:three), producing the
+      # universal2 dylib and vendored three.js inside the published tarball.
+      # Auth is via Trusted Publishing (OIDC) — no NODE_AUTH_TOKEN. npm reads the
+      # GitHub id-token, exchanges it with the registry, and attaches provenance.
+      - name: Publish to npm with provenance
+        if: steps.registry.outputs.already_published == 'false'
+        run: npm publish --provenance --access public --tag "$NPM_DIST_TAG"
+        env:
+          NPM_DIST_TAG: ${{ steps.dist_tag.outputs.tag }}

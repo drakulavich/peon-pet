@@ -1,27 +1,41 @@
 # peon-pet
 
-A macOS desktop pet for [Peon-Ping](https://peonping.com) — an orc that reacts to your Claude Code events with sprite animations. Built on Electron + Three.js.
+A macOS desktop pet for [Peon-Ping](https://peonping.com) — an orc that reacts to Claude Code, GitHub Copilot CLI, and Pi Agent events with sprite animations. Built on **Bun + AppKit + Three.js** (no Electron — a native `NSPanel` driven via `bun:ffi`, rendering the Three.js scene in system WebKit).
 
 <video src="https://github.com/user-attachments/assets/7fd9a2cb-d227-49ad-8ccc-7953ec392a2d" autoplay loop muted playsinline width="400"></video>
 
-Sits in the bottom-left corner of your screen, floats over all windows, and ignores mouse clicks (hover for tooltips).
+Sits in the bottom-left corner of your screen and floats over all windows. Clicks pass through to whatever's underneath — except when you hover the orc itself, where it captures the mouse so you can read tooltips and drag it around.
 
 ## Requirements
 
-- macOS (Linux/Windows untested)
-- Node.js 18+
+- macOS (the shell is AppKit-native; Linux/Windows are non-goals)
+- [Bun](https://bun.sh) 1.3+
+- Xcode Command Line Tools (`clang`, to build the native shim) — `xcode-select --install`
 - [peon-ping](https://peonping.com) installed and running
 
-## Quick start
+## Install (npm)
 
 ```bash
-git clone <repo> peon-pet
-cd peon-pet
-npm install
-npm start
+bunx @drakulavich/peon-pet               # run it once
+# or install globally:
+bun add -g @drakulavich/peon-pet && peon-pet
 ```
 
-Check your dock for the Peon-Ping logo — right-click it for controls.
+Requires **macOS (Apple Silicon or Intel)**, **[Bun](https://bun.sh)**, and **peon-ping** running.
+A prebuilt universal (arm64 + x86_64) native shim ships in the package — no Xcode needed. Pass `--character <name>`
+or `--corner <corner>` as below.
+
+## Run from source (development)
+
+```bash
+git clone https://github.com/drakulavich/peon-pet
+cd peon-pet
+bun install
+bun run start      # builds the native shim, then launches the pet
+```
+
+`bun run start` compiles `native/libpeonshell.dylib` (a tiny AppKit shim) and runs
+`src/main.ts`. Check your dock for the Peon-Ping logo.
 
 ## Install permanently (auto-start at login)
 
@@ -37,12 +51,105 @@ To remove:
 ./uninstall.sh
 ```
 
-## Dock controls
+## Controls
 
-Right-click the dock icon:
+Right-click the **Peon-Ping dock icon** for a menu:
 
-- **Hide Pet** / **Show Pet** — toggle visibility without quitting
+- **Hide Pet** / **Show Pet** — toggle visibility (orc + any sub-agent mini-pets) without quitting
 - **Quit** — exit completely
+
+You can also **drag** the orc with the mouse to move it, and quit with `Ctrl-C` in the
+foreground (or `./uninstall.sh` to remove the LaunchAgent). Only one instance runs at
+a time — launching a second just exits.
+
+## Characters
+
+The bundled skin is **orc**. You can add your own and select it in config or with a
+CLI flag:
+
+```bash
+bun run build:native                  # once
+bun src/main.ts --character my-skin   # or --corner top-right
+```
+
+Config lives at `~/Library/Application Support/peon-pet/peon-pet-config.json` (the
+legacy Electron `Peon Pet` dir is reused automatically if you're upgrading):
+
+```json
+{ "character": "my-skin", "corner": "bottom-right" }
+```
+
+**Custom skins:** drop your own PNGs in
+`~/Library/Application Support/peon-pet/characters/<name>/` —
+`sprite-atlas.png`, `borders.png`, `bg.png`, `dock-icon.png`. Any asset you don't
+provide falls back to the bundled orc. Precedence for the active character is
+`--character` > config > `orc`.
+
+## Antigravity
+
+Peon Pet can react to Antigravity agent runs through its hooks. Install with:
+
+```bash
+peon-pet antigravity install
+```
+
+This adds a `peon-pet` entry to `~/.gemini/config/hooks.json` (`PreInvocation`
+and `Stop` only); other hook entries are left untouched. Restart Antigravity and
+keep Peon Pet running. Only the conversation ID, event, and working directory are
+sent, over the local socket. Remove it with `peon-pet antigravity uninstall`.
+
+## GitHub Copilot CLI
+
+Peon Pet can also react to local interactive Copilot CLI sessions. Install its
+user-level hooks explicitly:
+
+```bash
+peon-pet copilot install
+```
+
+This adds `peon-pet.json` under `~/.copilot/hooks/`, or
+`$COPILOT_HOME/hooks/` when `COPILOT_HOME` is set. It does not edit repository
+hooks or other Copilot settings. Start (or restart) Copilot CLI and keep Peon Pet
+running; if Copilot is sandboxed, its hook process may need permission to access
+Peon Pet's local socket. Peon Pet does not change Copilot's sandbox policy.
+
+Remove the integration with:
+
+```bash
+peon-pet copilot uninstall
+```
+
+The integration supports local Copilot CLI lifecycle events only; Copilot Cloud
+Agent and IDE-only events are not supported. Hook payloads are reduced to session
+metadata before forwarding: prompt text, tool arguments/results, agent responses,
+and error details are not sent to Peon Pet. If the pet is not running, hooks
+report the delivery issue but do not block or change Copilot's behavior.
+
+## Pi Agent
+
+Peon Pet can react to local Pi Agent sessions through a user-level extension.
+Install it explicitly:
+
+```bash
+peon-pet pi install
+```
+
+This installs `peon-pet.ts` under `~/.pi/agent/extensions/`, or under
+`$PI_CODING_AGENT_DIR/extensions/` when `PI_CODING_AGENT_DIR` is set. The
+extension is shared by Pi launchers that use the same Pi Agent directory, so
+separate cmux shims do not need separate setup. Restart Pi after installing.
+
+Pi session start wakes the pet, a turn start triggers typing, a settled agent
+celebrates, and session shutdown removes its Session dot. The extension sends
+only a namespaced session ID, event, working directory, and timestamp; prompts,
+tool arguments/results, and responses are not forwarded. If Peon Pet is not
+running, Pi continues normally.
+
+Remove only Peon Pet's extension with:
+
+```bash
+peon-pet pi uninstall
+```
 
 ## Animations
 
@@ -54,49 +161,78 @@ Right-click the dock icon:
 | Permission request / context compact | Alarmed |
 | Tool failure | Annoyed |
 
+| Copilot CLI event | Animation |
+|---|---|
+| Session start | Waking up |
+| Prompt submit | Typing |
+| Agent stop | Celebrate |
+| Permission request / context compact | Alarmed |
+| Tool failure | Annoyed |
+
+| Pi Agent event | Animation |
+|---|---|
+| Session start | Waking up |
+| Turn start | Typing |
+| Agent settled | Celebrate |
+
 The orc stays in typing mode while any session is actively working (event within last 30 s). Returns to sleeping after 30 s of inactivity.
 
 ## Session dots
 
-Up to 10 glowing orbs appear above the orc — one per tracked Claude Code session:
+Up to 10 glowing orbs appear above the orc — one per tracked Claude Code,
+Copilot CLI, or Pi Agent session:
 
 - **Bright pulsing green** — active (event within last 30 s)
 - **Dim green** — idle (last event 30 s–2 min ago)
 
-Sessions are removed when Claude Code fires `SessionEnd`, or automatically after 10 min of inactivity.
+Claude Code sessions are dropped after 10 min of inactivity (their JSONL
+transcripts have no explicit session-end event); Copilot CLI and Pi Agent
+sessions are removed when their respective session-end events arrive.
 
 Hover over a dot to see the project folder and status. Hover anywhere on the widget to see all active project names.
 
-## Dependencies
+## Sub-agents
 
-- **boolean**: Replaced with a local shim (`patches/boolean-shim`) via `overrides` so the deprecated `boolean` package is not installed. The shim matches the same API (`boolean`, `isBooleanable`).
-- **glob / inflight**: These come from **Jest** (and related packages). Jest 29 still uses `glob@7`, which depends on deprecated `inflight`. You may see npm deprecation warnings; they are harmless. Upgrading to `glob@10` would require Jest to use the new API (see [jestjs/jest#15173](https://github.com/jestjs/jest/issues/15173), [#15910](https://github.com/jestjs/jest/issues/15910)). Until Jest updates, the warnings can be ignored or suppressed.
+When a session spawns sub-agents, a mini-orc (up to 5) pops up stacked above the main
+pet for each active sub-agent and disappears when it finishes. The parent session is
+kept "awake" while its sub-agents run, so the orc doesn't fall asleep during long
+sub-agent tasks.
+
+## Architecture
+
+```
+src/main.ts          composition root: window + watcher + session tracker
+src/shell/
+  types.ts           NativeShell boundary (interface)
+  appkit.ts          real shell — bun:ffi → native/libpeonshell.dylib
+  fake.ts            in-memory shell for headless tests
+src/app/             ported logic (session tracker, jsonl watcher, anim, …)
+native/peonshell.m   thin AppKit/WebKit C shim (NSPanel + WKWebView +
+                     peon-asset:// scheme handler); built to libpeonshell.dylib
+renderer/            unchanged Three.js renderer, loaded over peon-asset://
+```
+
+The only file that touches `bun:ffi` is `src/shell/appkit.ts`. Everything above the
+`NativeShell` boundary is tested against `FakeShell`, so the suite runs headlessly.
 
 ## Development
 
 ```bash
-npm run dev    # starts with DevTools detached
-npm test       # runs Jest test suite (63 tests)
+bun run dev    # builds the shim, runs with native diagnostics (--dev)
+bun test       # 223 tests, headless (no window opened)
+bun run build:native   # rebuild native/libpeonshell.dylib after editing the shim
 ```
 
-Simulate an event by writing to the peon-ping state file:
+Specs of record live under `openspec/specs/` (capabilities), with shipped changes
+archived in `openspec/changes/archive/`.
 
-```bash
-python3 -c "
-import json, time, os, uuid
-f = os.path.expanduser('~/.claude/hooks/peon-ping/.state.json')
-try: state = json.load(open(f))
-except: state = {}
-state['last_active'] = {
-  'session_id': str(uuid.uuid4()),
-  'timestamp': time.time(),
-  'event': 'PermissionRequest'
-}
-json.dump(state, open(f, 'w'))
-"
-```
+The pet reacts to Claude Code automatically: just use Claude Code and watch the orc
+wake / type / celebrate. With `bun run dev` the terminal echoes each reaction, e.g.
+`→ orc: typing (UserPromptSubmit)`.
 
-Valid events: `SessionStart`, `SessionEnd`, `Stop`, `UserPromptSubmit`, `PermissionRequest`, `PostToolUseFailure`, `PreCompact`
+Claude Code events: `SessionStart`, `Stop`, `UserPromptSubmit`, `PermissionRequest`,
+`PostToolUseFailure`, `PreCompact`. Copilot CLI events are installed separately
+with `peon-pet copilot install`; Pi Agent events use `peon-pet pi install`.
 
 ## Sprite atlas
 
