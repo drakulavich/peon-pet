@@ -22,7 +22,12 @@ export const ANTIGRAVITY_NAMESPACE = "peon-pet";
 
 const HOOK_EVENTS = {
   PreInvocation: "UserPromptSubmit",
+  UserPromptSubmit: "UserPromptSubmit",
+  SessionStart: "SessionStart",
   Stop: "Stop",
+  PermissionRequest: "PermissionRequest",
+  PostToolUseFailure: "PostToolUseFailure",
+  PreCompact: "PreCompact",
   SessionEnd: "SessionEnd",
 } as const;
 type HookName = keyof typeof HOOK_EVENTS;

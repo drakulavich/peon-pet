@@ -29,6 +29,9 @@ describe("parseAntigravityHookEvent", () => {
     expect(validateCopilotPetEvent(event)).not.toBeNull();
     expect(parseAntigravityHookEvent("Stop", {}, 5)).toMatchObject({ event: "Stop", cwd: null });
     expect(parseAntigravityHookEvent("SessionEnd", {}, 5)).toMatchObject({ event: "SessionEnd", cwd: null });
+    expect(parseAntigravityHookEvent("UserPromptSubmit", {}, 5)).toMatchObject({ event: "UserPromptSubmit", cwd: null });
+    expect(parseAntigravityHookEvent("PermissionRequest", {}, 5)).toMatchObject({ event: "PermissionRequest", cwd: null });
+    expect(parseAntigravityHookEvent("PostToolUseFailure", {}, 5)).toMatchObject({ event: "PostToolUseFailure", cwd: null });
   });
 
   test("ignores unknown hooks and non-object payloads", () => {
